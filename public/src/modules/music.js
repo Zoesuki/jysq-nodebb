@@ -1,19 +1,22 @@
+// 全局变量，标记cookie是否已设置
+let isCookieSet = false;
+
 define('music', [
-	'bootbox',
 	'alerts',
-], function (bootbox, alerts) {
+], function (alerts) {
 	const Music = {};
 
 	let currentRoomId = null;
 	let isHost = false;
 	let playlist = [];
 	let currentTrackIndex = -1;
+	let audioPlayer = null;
+	let lyricsLines = [];
 
 	Music.init = function () {
 		// 检查是否在音乐页面
 		const isMusicRoomsPage = $('#create-music-room').length > 0;
 		const isMusicRoomPage = $('.music-room-container').length > 0;
-		// console.log(isMusicRoomPage,isMusicRoomsPage);
 
 		if (!isMusicRoomsPage && !isMusicRoomPage) {
 			return;
@@ -39,30 +42,21 @@ define('music', [
 	};
 
 	function setupRoomList() {
-		console.log('[Music] setupRoomList 被调用');
-
 		if (!$('#create-music-room').length) {
-			console.log('[Music] 未找到 #create-music-room 元素');
 			return;
 		}
-
-		console.log('[Music] 找到创建房间按钮，开始设置事件监听');
 
 		// 加载房间列表
 		loadRooms();
 
 		// 创建房间按钮
 		$('#create-music-room').on('click', function () {
-			console.log('[Music] 创建房间按钮被点击');
 			$('#create-room-modal').modal('show');
 		});
 
 		// 创建房间
 		$('#create-room-btn').on('click', function () {
-			console.log('[Music] 创建按钮被点击');
 			const roomName = $('#room-name').val().trim();
-			console.log('[Music] 房间名称:', roomName);
-
 			if (!roomName) {
 				alerts.alert({
 					title: '错误',
@@ -74,16 +68,7 @@ define('music', [
 
 			// 生成房间ID
 			const roomId = 'room-' + Date.now();
-			console.log('[Music] 生成房间ID:', roomId);
-
-			// 添加房间描述（可选）
-			const roomDescription = $('#room-description').val().trim();
-			console.log('[Music] 房间描述:', roomDescription);
-
-			// 重定向到房间页面
-			console.log('[Music] 即将重定向到:', '/music/' + roomId);
 			ajaxify.go('/music/' + roomId);
-
 			$('#create-room-modal').modal('hide');
 		});
 
@@ -152,6 +137,17 @@ define('music', [
 			return;
 		}
 
+		// 初始化音频播放器
+		audioPlayer = document.getElementById('audio-player');
+		if (!audioPlayer) {
+			console.error('Audio player element not found');
+		} else {
+			// 音频播放事件
+			audioPlayer.addEventListener('timeupdate', onTimeUpdate);
+			audioPlayer.addEventListener('ended', onTrackEnded);
+			audioPlayer.addEventListener('loadedmetadata', onMetadataLoaded);
+		}
+
 		// 从URL获取房间ID
 		const pathParts = window.location.pathname.split('/');
 		if (pathParts.length >= 3) {
@@ -164,11 +160,11 @@ define('music', [
 		$('#prev-btn').on('click', prevTrack);
 		$('#next-btn').on('click', nextTrack);
 
-		// 添加音乐
-		$('#add-track-btn').on('click', addTrack);
-		$('#music-url-input').on('keypress', function (e) {
+		// 搜索音乐
+		$('#search-track-btn').on('click', searchMusic);
+		$('#music-search-input').on('keypress', function (e) {
 			if (e.which === 13) {
-				addTrack();
+				searchMusic();
 			}
 		});
 
@@ -186,6 +182,19 @@ define('music', [
 
 	async function joinRoom(roomId) {
 		try {
+			// 先设置QQ音乐Cookie（只设置一次）
+			if (!isCookieSet) {
+				try {
+					await fetch('/api/music/cookie/3816852108', {
+						credentials: 'include',
+					});
+					console.log('[Music] QQMusic cookie set successfully');
+					isCookieSet = true;
+				} catch (err) {
+					console.warn('[Music] Failed to set QQMusic cookie:', err);
+				}
+			}
+
 			const response = await socket.emit('modules.music.joinRoom', { roomId: roomId });
 			isHost = response.room.isHost;
 			currentRoomId = roomId;
@@ -208,7 +217,9 @@ define('music', [
 			$('#track-artist').text(room.currentTrack.artist || '-');
 
 			if (room.currentTrack.cover) {
-				$('#album-cover').html(`<img src="${room.currentTrack.cover}" alt="专辑封面" style="width: 100%; height: 100%; object-fit: cover;">`);
+				$('#album-cover').html(`<img src="${room.currentTrack.cover}" alt="专辑封面">`);
+			} else {
+				$('#album-cover').html(`<i class="fa fa-music fa-5x"></i>`);
 			}
 
 			// 更新播放按钮状态
@@ -242,6 +253,7 @@ define('music', [
 	function onMusicPlay(data) {
 		if (data.track) {
 			currentTrackIndex = playlist.findIndex(t => t.id === data.track.id);
+			playTrack(data.track);
 			updateRoomUI({
 				currentTrack: data.track,
 				isPlaying: true,
@@ -251,6 +263,9 @@ define('music', [
 	}
 
 	function onMusicPause(data) {
+		if (audioPlayer) {
+			audioPlayer.pause();
+		}
 		updateRoomUI({
 			currentTrack: getCurrentTrack(),
 			isPlaying: false,
@@ -279,8 +294,20 @@ define('music', [
 		if (!isHost) return;
 
 		try {
-			if (isPlaying()) {
-				await socket.emit('modules.music.pause', { roomId: currentRoomId });
+			if (audioPlayer && audioPlayer.src) {
+				if (audioPlayer.paused) {
+					audioPlayer.play();
+					// 同步播放状态到服务器
+					socket.emit('modules.music.play', { roomId: currentRoomId, track: getCurrentTrack() }).catch(err => {
+						console.error('Failed to sync play:', err);
+					});
+				} else {
+					audioPlayer.pause();
+					// 同步暂停状态到服务器
+					socket.emit('modules.music.pause', { roomId: currentRoomId }).catch(err => {
+						console.error('Failed to sync pause:', err);
+					});
+				}
 			} else {
 				const track = getCurrentTrack();
 				if (track) {
@@ -294,6 +321,159 @@ define('music', [
 
 	function isPlaying() {
 		return $('#play-btn').find('i').hasClass('fa-pause');
+	}
+
+	// 播放歌曲
+	function playTrack(track) {
+		if (!audioPlayer || !track || !track.url) {
+			console.error('Invalid track or audio player');
+			return;
+		}
+
+		audioPlayer.src = track.url;
+		audioPlayer.play().catch(err => {
+			console.error('Failed to play audio:', err);
+		});
+
+		// 更新专辑封面
+		if (track.cover) {
+			$('#album-cover').html(`<img src="${track.cover}" alt="专辑封面">`);
+		} else {
+			$('#album-cover').html(`<i class="fa fa-music fa-5x"></i>`);
+		}
+
+		// 获取歌词
+		fetchLyrics(track.id);
+
+		// 更新播放按钮状态
+		const playBtn = $('#play-btn');
+		playBtn.html('<i class="fa fa-pause"></i>');
+		playBtn.removeClass('btn-primary').addClass('btn-outline-primary');
+	}
+
+	// 获取歌词
+	async function fetchLyrics(songId) {
+		try {
+			const response = await fetch(`/api/music/lyric/${songId}`, {
+				credentials: 'include',
+			});
+			const data = await response.json();
+
+			if (data.result === 100 && data.data && data.data.lyric) {
+				parseLyrics(data.data.lyric);
+			} else {
+				$('#lyrics-container').html(`
+					<div class="text-muted">
+						<p>暂无歌词</p>
+					</div>
+				`);
+			}
+		} catch (err) {
+			console.error('Failed to fetch lyrics:', err);
+		}
+	}
+
+	// 解析歌词
+	function parseLyrics(lrcText) {
+		if (!lrcText) {
+			$('#lyrics-container').html(`
+				<div class="text-muted">
+					<p>暂无歌词</p>
+				</div>
+			`);
+			return;
+		}
+
+		const lines = lrcText.split('\n');
+		lyricsLines = [];
+
+		for (const line of lines) {
+			const match = line.match(/\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);
+			if (match) {
+				const minutes = parseInt(match[1]);
+				const seconds = parseInt(match[2]);
+				const milliseconds = parseInt(match[3]);
+				const time = minutes * 60 + seconds + milliseconds / 1000;
+				const text = match[4].trim();
+				if (text) {
+					lyricsLines.push({ time, text });
+				}
+			}
+		}
+
+		displayLyrics();
+	}
+
+	// 显示歌词
+	function displayLyrics() {
+		const container = $('#lyrics-container');
+
+		if (lyricsLines.length === 0) {
+			container.html(`
+				<div class="text-muted">
+					<p>暂无歌词</p>
+				</div>
+			`);
+			return;
+		}
+
+		let html = '';
+		for (let i = 0; i < lyricsLines.length; i++) {
+			html += `<p class="lyric-line" data-time="${lyricsLines[i].time}" data-index="${i}">${lyricsLines[i].text}</p>`;
+		}
+		container.html(html);
+	}
+
+	// 音频时间更新事件
+	function onTimeUpdate() {
+		if (!audioPlayer) return;
+
+		const currentTime = audioPlayer.currentTime;
+
+		// 更新进度条
+		const progress = (currentTime / audioPlayer.duration) * 100 || 0;
+		$('#progress-bar').css('width', progress + '%');
+		$('#current-time').text(formatTime(currentTime));
+
+		// 如果没有歌词，直接返回
+		if (lyricsLines.length === 0) return;
+
+		let activeIndex = -1;
+
+		// 找到当前时间对应的歌词行
+		for (let i = 0; i < lyricsLines.length; i++) {
+			if (lyricsLines[i].time <= currentTime) {
+				activeIndex = i;
+			} else {
+				break;
+			}
+		}
+
+		// 高亮当前歌词行
+		if (activeIndex >= 0) {
+			$('.lyric-line').removeClass('active').css('opacity', '0.5');
+			const activeLine = $(`.lyric-line[data-index="${activeIndex}"]`);
+			activeLine.addClass('active').css('opacity', '1');
+			activeLine.css('font-size', '1.2em').css('font-weight', 'bold');
+
+			// 滚动到当前歌词
+			const container = $('#lyrics-container');
+			const offset = activeLine.position().top - container.scrollTop() - container.height() / 2;
+			container.animate({ scrollTop: container.scrollTop() + offset }, 200);
+		}
+	}
+
+	// 音频元数据加载完成
+	function onMetadataLoaded() {
+		if (!audioPlayer) return;
+		$('#total-time').text(formatTime(audioPlayer.duration));
+	}
+
+	// 音频播放结束
+	function onTrackEnded() {
+		if (isHost) {
+			nextTrack();
+		}
 	}
 
 	async function prevTrack() {
@@ -324,58 +504,146 @@ define('music', [
 		}
 	}
 
-	function addTrack() {
-		const url = $('#music-url-input').val().trim();
-		if (!url) return;
+	// 搜索音乐
+	async function searchMusic() {
+		const keyword = $('#music-search-input').val().trim();
+		if (!keyword) {
+			alerts.alert({
+				title: '提示',
+				message: '请输入搜索关键词',
+				type: 'info',
+			});
+			return;
+		}
 
-		// 解析音乐链接
-		const track = parseMusicUrl(url);
-		if (track) {
-			playlist.push(track);
-			updatePlaylistUI();
-			$('#music-url-input').val('');
+		try {
+			const response = await fetch('/api/music/search', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				credentials: 'include',
+				body: JSON.stringify({
+					key: keyword,
+					t: '0',
+					pageSize: 10,
+				}),
+			});
+			const data = await response.json();
 
-			// 如果是房主且列表为空，自动播放
-			if (isHost && playlist.length === 1) {
-				currentTrackIndex = 0;
-				socket.emit('modules.music.play', { roomId: currentRoomId, track: track }).catch(err => {
-					console.error('Failed to play track:', err);
+			if (data.result !== 100 || !data.data.list || data.data.list.length === 0) {
+				$('#search-results').hide();
+				alerts.alert({
+					title: '未找到',
+					message: '未找到相关歌曲',
+					type: 'info',
 				});
+				return;
 			}
-		} else {
+
+			// 显示搜索结果
+			showSearchResults(data.data.list);
+		} catch (err) {
+			console.error('Search failed:', err);
 			alerts.alert({
 				title: '错误',
-				message: '不支持的音乐链接格式',
+				message: '搜索失败，请稍后重试',
 				type: 'error',
 			});
 		}
 	}
 
-	function parseMusicUrl(url) {
-		// 简单的音乐链接解析（实际项目中应该对接音乐平台API）
-		let name = '未知歌曲';
-		let artist = '未知艺人';
-		let cover = null;
+	// 显示搜索结果
+	function showSearchResults(songs) {
+		const container = $('#search-results');
 
-		if (url.includes('music.163.com')) {
-			// 网易云音乐
-			name = '网易云音乐';
-			cover = 'https://p2.music.126.net/UeTuwE7pvjBpypWLudqukA==/3132508627578625.jpg';
-		} else if (url.includes('y.qq.com')) {
-			// QQ音乐
-			name = 'QQ音乐';
-			cover = 'https://y.qq.com/music/common/upload/t_music_splash/logo.png';
-		} else {
-			name = '外部音乐';
+		let html = '';
+		for (const song of songs) {
+			const songName = song.songname || song.title || '未知歌曲';
+			const singer = (song.singer || []).map(s => s.name).join(', ') || '未知歌手';
+			const album = song.albumname || '';
+			const songmid = song.songmid;
+			const albummid = song.albummid || '';
+			const duration = song.interval ? formatTime(song.interval) : '';
+			// QQ Music album cover URL
+			const coverUrl = `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albummid}.jpg`;
+
+			html += `
+				<div class="list-group-item d-flex justify-content-between align-items-center" data-songmid="${songmid}" data-albummid="${albummid}" data-songname="${songName}" data-singer="${singer}" data-cover="${coverUrl}">
+					<div class="d-flex align-items-center" style="flex: 1; min-width: 0;">
+						<img src="${coverUrl}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 12px; flex-shrink: 0;" alt="${songName}">
+						<div style="flex: 1; min-width: 0; overflow: hidden;">
+							<div class="fw-bold text-truncate">${songName}</div>
+							<small class="text-muted text-truncate">${singer} ${album ? '- ' + album : ''}</small>
+						</div>
+					</div>
+					<div class="d-flex align-items-center flex-shrink-0">
+						<small class="text-muted me-3">${duration}</small>
+						<button class="btn btn-sm btn-primary add-song-btn">
+							<i class="fa fa-plus"></i> 添加
+						</button>
+					</div>
+				</div>
+			`;
 		}
 
-		return {
-			id: 'track-' + Date.now(),
-			name: name,
-			artist: artist,
-			cover: cover,
-			url: url,
-		};
+		container.html(html);
+		container.show();
+
+		// 绑定添加按钮事件
+		$('.add-song-btn').on('click', async function() {
+			const item = $(this).closest('.list-group-item');
+			const songmid = item.data('songmid');
+			const songName = item.data('songname');
+			const singer = item.data('singer');
+			const coverUrl = item.data('cover');
+
+			try {
+				// 获取播放链接
+				const response = await fetch(`/api/music/song/url/${songmid}`, {
+					credentials: 'include',
+				});
+				const data = await response.json();
+
+				if (data.result !== 100 || !data.data) {
+					alerts.alert({
+						title: '错误',
+						message: '获取播放链接失败',
+						type: 'error',
+					});
+					return;
+				}
+
+				const track = {
+					id: songmid,
+					name: songName,
+					artist: singer,
+					cover: coverUrl,
+					url: data.data,
+				};
+
+				playlist.push(track);
+				currentTrackIndex = playlist.length - 1;
+				updatePlaylistUI();
+
+				// 隐藏搜索结果
+				$('#search-results').hide();
+
+				// 如果是房主，立即播放
+				if (isHost) {
+					socket.emit('modules.music.play', { roomId: currentRoomId, track: track }).catch(err => {
+						console.error('Failed to play track:', err);
+					});
+				}
+			} catch (err) {
+				console.error('Add song failed:', err);
+				alerts.alert({
+					title: '错误',
+					message: '添加歌曲失败',
+					type: 'error',
+				});
+			}
+		});
 	}
 
 	function updatePlaylistUI() {
@@ -386,7 +654,7 @@ define('music', [
 				<div class="text-center text-muted py-4">
 					<i class="fa fa-list fa-2x mb-2"></i>
 					<p>播放列表为空</p>
-					<p class="text-sm">添加音乐链接开始听歌</p>
+					<p class="text-sm">搜索歌曲添加到播放列表</p>
 				</div>
 			`);
 			return;
@@ -398,14 +666,15 @@ define('music', [
 			html += `
 				<div class="list-group-item ${active ? 'active' : ''}" data-index="${index}">
 					<div class="d-flex align-items-center">
-						<div class="me-3">
+						${track.cover ? `<img src="${track.cover}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px; margin-right: 10px; flex-shrink: 0;">` : ''}
+						<div class="me-2 flex-shrink-0">
 							${active ? '<i class="fa fa-play"></i>' : '<span class="text-muted">' + (index + 1) + '</span>'}
 						</div>
-						<div class="flex-grow-1">
-							<div>${track.name}</div>
-							<div class="text-sm ${active ? 'text-light' : 'text-muted'}">${track.artist || '-'}</div>
+						<div style="flex: 1; min-width: 0; overflow: hidden;">
+							<div class="text-truncate">${track.name}</div>
+							<div class="text-sm ${active ? 'text-light' : 'text-muted'} text-truncate">${track.artist || '-'}</div>
 						</div>
-						${isHost ? `<button class="btn btn-sm btn-outline-danger remove-track-btn" data-index="${index}"><i class="fa fa-times"></i></button>` : ''}
+						${isHost ? `<button class="btn btn-sm btn-outline-danger remove-track-btn flex-shrink-0" data-index="${index}"><i class="fa fa-times"></i></button>` : ''}
 					</div>
 				</div>
 			`;
@@ -439,9 +708,6 @@ define('music', [
 		}, true);
 
 		input.val('');
-
-		// 广播到房间（这里简化处理，实际应该通过Socket发送）
-		// socket.emit('modules.music.sendChat', { roomId: currentRoomId, message: message });
 	}
 
 	function addChatMessage(message, isOwn) {
@@ -489,6 +755,10 @@ define('music', [
 	// 监听页面跳转事件，清理事件监听器
 	$(window).on('action:ajaxify.start', function () {
 		Music.removeListeners();
+		if (audioPlayer) {
+			audioPlayer.pause();
+			audioPlayer.src = '';
+		}
 	});
 
 	return Music;

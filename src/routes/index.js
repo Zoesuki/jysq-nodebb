@@ -47,6 +47,12 @@ _mounts.main = (app, middleware, controllers) => {
 	// 一起听歌路由
 	setupPageRoute(app, '/music', [], controllers.music.getRooms);
 	setupPageRoute(app, '/music/:roomId', [], controllers.music.getRoom);
+
+	// QQ音乐API代理路由
+	app.get('/api/music/cookie/:id', controllers.music.setCookie);
+	app.post('/api/music/search', controllers.music.search);
+	app.get('/api/music/song/url/:id', controllers.music.getSongUrl);
+	app.get('/api/music/lyric/:id', controllers.music.getLyrics);
 };
 
 _mounts.mod = (app, middleware, controllers) => {
