@@ -1,19 +1,25 @@
 <div class="row h-100">
 	<div class="h-100 {{{if widgets.sidebar.length }}}col-lg-9 col-sm-12{{{ else }}}col-lg-12{{{ end }}}">
-		<div class="music-rooms-container h-100 mt-3 py-md-3">
-			<div class="card">
-				<div class="card-header">
-					<h3 class="card-title">一起听歌</h3>
+		<div class="music-rooms-container h-100 mt-3 mt-md-0 py-md-3">
+			<!-- Hero Section -->
+			<div class="music-hero mb-4 p-5 text-white rounded-4 shadow-sm" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+				<div class="row align-items-center">
+					<div class="col-md-8">
+						<h1 class="display-5 fw-bold mb-2">一起听歌</h1>
+						<p class="lead mb-4">在这里，你可以和社区的朋友们实时同步听歌，交流音乐心得。</p>
+						<button id="create-music-room" class="btn btn-light btn-lg px-4 shadow-sm">
+							<i class="fa fa-plus-circle me-2"></i> 创建听歌房间
+						</button>
+					</div>
+					<div class="col-md-4 d-none d-md-block text-center">
+						<i class="fa fa-music fa-5x opacity-50"></i>
+					</div>
 				</div>
-				<div class="card-body">
-					<div class="d-flex flex-column gap-3">
-						<div class="text-center mb-3">
-							<button id="create-music-room" class="btn btn-primary btn-lg">
-								<i class="fa fa-music"></i> 创建听歌房间
-							</button>
-						</div>
+			</div>
 
-						<div id="create-room-modal" class="modal fade" tabindex="-1">
+			<div class="card border-0 shadow-sm rounded-4">
+				<div class="card-body p-4">
+					<div id="create-room-modal" class="modal fade" tabindex="-1">
 							<div class="modal-dialog">
 								<div class="modal-content">
 									<div class="modal-header">
@@ -40,13 +46,11 @@
 							</div>
 						</div>
 
-						<hr>
-
-						<h5 class="mb-3">活跃房间</h5>
-						<div id="rooms-list" class="d-flex flex-column gap-2">
-							<div class="text-center text-muted py-5">
-								<i class="fa fa-music fa-3x mb-3"></i>
-								<p>暂无活跃房间，创建一个开始吧！</p>
+						<h5 class="fw-bold mb-4"><i class="fa fa-fire text-danger me-2"></i>活跃房间</h5>
+						<div id="rooms-list" class="row g-4">
+							<div class="col-12 text-center text-muted py-5">
+								<i class="fa fa-music fa-3x mb-3 opacity-25"></i>
+								<p class="lead">暂无活跃房间，创建一个开始吧！</p>
 							</div>
 						</div>
 					</div>

@@ -96,9 +96,9 @@ define('music', [
 
 		if (!rooms || rooms.length === 0) {
 			container.html(`
-				<div class="text-center text-muted py-5">
-					<i class="fa fa-music fa-3x mb-3"></i>
-					<p>暂无活跃房间，创建一个开始吧！</p>
+				<div class="col-12 text-center text-muted py-5">
+					<i class="fa fa-music fa-3x mb-3 opacity-25"></i>
+					<p class="lead">暂无活跃房间，创建一个开始吧！</p>
 				</div>
 			`);
 			return;
@@ -106,22 +106,36 @@ define('music', [
 
 		let html = '';
 		rooms.forEach(function (room) {
+			const cover = room.currentTrack && room.currentTrack.cover ? room.currentTrack.cover : 'https://y.gtimg.cn/music/photo_new/T002R300x300M000002eS9mS2YvTf8.jpg';
+			const trackName = room.currentTrack ? room.currentTrack.name : '暂无播放';
+			const artistName = room.currentTrack ? (room.currentTrack.artist || '-') : '-';
+
 			html += `
-				<div class="card room-item mb-2">
-					<div class="card-body">
-						<div class="d-flex justify-content-between align-items-center">
-							<div>
-								<h6 class="mb-1">房间 #${room.roomId}</h6>
-								<p class="text-sm text-muted mb-1">
-									${room.currentTrack ? room.currentTrack.name : '未播放'}
-								</p>
-								<div class="text-sm">
-									<i class="fa fa-users"></i> ${room.listeners} 人在听
-									${room.isPlaying ? '<span class="badge bg-success ms-2">播放中</span>' : ''}
+				<div class="col-md-6 col-lg-4">
+					<div class="card h-100 room-item border-0 shadow-sm rounded-4 overflow-hidden position-relative">
+						<div class="room-cover-wrapper position-relative" style="height: 160px;">
+							<img src="${cover}" class="card-img-top w-100 h-100 object-fit-cover blur-bg" alt="room cover">
+							<div class="position-absolute top-0 start-0 w-100 h-100 bg-dark opacity-50"></div>
+							<div class="position-absolute top-50 start-50 translate-middle text-white text-center w-100 px-3">
+								<h5 class="card-title mb-1 text-truncate fw-bold">${room.roomId.replace('room-', '房间 #')}</h5>
+								<div class="badge rounded-pill bg-primary shadow-sm">
+									<i class="fa fa-users me-1"></i> ${room.listeners} 人在线
 								</div>
 							</div>
-							<button class="btn btn-primary btn-sm join-room-btn" data-room-id="${room.roomId}">
-								加入
+							${room.isPlaying ? '<div class="playing-indicator-v2 position-absolute top-3 end-3"><span class="badge bg-success shadow-sm">播放中</span></div>' : ''}
+						</div>
+						<div class="card-body p-3">
+							<div class="d-flex align-items-center mb-3">
+								<div class="flex-shrink-0 me-3">
+									<img src="${cover}" class="rounded-3 shadow-sm" style="width: 48px; height: 48px; object-fit: cover;" alt="track cover">
+								</div>
+								<div class="flex-grow-1 overflow-hidden">
+									<p class="mb-0 text-truncate fw-bold text-sm">${trackName}</p>
+									<p class="mb-0 text-truncate text-muted text-xs">${artistName}</p>
+								</div>
+							</div>
+							<button class="btn btn-primary w-100 rounded-pill join-room-btn shadow-sm" data-room-id="${room.roomId}">
+								<i class="fa fa-sign-in me-1"></i> 加入房间
 							</button>
 						</div>
 					</div>
@@ -216,20 +230,23 @@ define('music', [
 			$('#track-name').text(room.currentTrack.name);
 			$('#track-artist').text(room.currentTrack.artist || '-');
 
+			const albumCover = $('#album-cover');
 			if (room.currentTrack.cover) {
-				$('#album-cover').html(`<img src="${room.currentTrack.cover}" alt="专辑封面">`);
+				albumCover.html(`<img src="${room.currentTrack.cover}" alt="专辑封面" class="rounded-circle shadow-lg">`);
 			} else {
-				$('#album-cover').html(`<i class="fa fa-music fa-5x"></i>`);
+				albumCover.html(`<i class="fa fa-music fa-5x"></i>`);
 			}
 
-			// 更新播放按钮状态
+			// 更新播放按钮状态和封面旋转
 			const playBtn = $('#play-btn');
 			if (room.isPlaying) {
 				playBtn.html('<i class="fa fa-pause"></i>');
 				playBtn.removeClass('btn-primary').addClass('btn-outline-primary');
+				albumCover.addClass('playing');
 			} else {
 				playBtn.html('<i class="fa fa-play"></i>');
 				playBtn.removeClass('btn-outline-primary').addClass('btn-primary');
+				albumCover.removeClass('playing');
 			}
 
 			// 更新进度
@@ -651,10 +668,10 @@ define('music', [
 
 		if (playlist.length === 0) {
 			container.html(`
-				<div class="text-center text-muted py-4">
-					<i class="fa fa-list fa-2x mb-2"></i>
+				<div class="text-center text-muted py-5">
+					<i class="fa fa-compact-disc fa-3x mb-3 opacity-25 fa-spin"></i>
 					<p>播放列表为空</p>
-					<p class="text-sm">搜索歌曲添加到播放列表</p>
+					<p class="text-sm">快去搜索并添加你喜欢的歌曲吧</p>
 				</div>
 			`);
 			return;
@@ -664,17 +681,17 @@ define('music', [
 		playlist.forEach(function (track, index) {
 			const active = index === currentTrackIndex;
 			html += `
-				<div class="list-group-item ${active ? 'active' : ''}" data-index="${index}">
-					<div class="d-flex align-items-center">
-						${track.cover ? `<img src="${track.cover}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px; margin-right: 10px; flex-shrink: 0;">` : ''}
-						<div class="me-2 flex-shrink-0">
-							${active ? '<i class="fa fa-play"></i>' : '<span class="text-muted">' + (index + 1) + '</span>'}
-						</div>
-						<div style="flex: 1; min-width: 0; overflow: hidden;">
-							<div class="text-truncate">${track.name}</div>
-							<div class="text-sm ${active ? 'text-light' : 'text-muted'} text-truncate">${track.artist || '-'}</div>
-						</div>
-						${isHost ? `<button class="btn btn-sm btn-outline-danger remove-track-btn flex-shrink-0" data-index="${index}"><i class="fa fa-times"></i></button>` : ''}
+				<div class="list-group-item d-flex align-items-center ${active ? 'active' : ''} border-0 mb-2 rounded-3 shadow-sm" data-index="${index}" style="cursor: pointer;">
+					<div class="flex-shrink-0 me-3">
+						${track.cover ? `<img src="${track.cover}" class="rounded-3 shadow-sm" style="width: 48px; height: 48px; object-fit: cover;">` : '<div class="bg-light rounded-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;"><i class="fa fa-music text-muted"></i></div>'}
+					</div>
+					<div class="flex-grow-1 overflow-hidden me-2">
+						<div class="text-truncate fw-bold mb-0 ${active ? 'text-primary' : ''}">${track.name}</div>
+						<div class="text-xs text-muted text-truncate">${track.artist || '-'}</div>
+					</div>
+					<div class="flex-shrink-0 d-flex align-items-center gap-2">
+						${active ? '<span class="badge rounded-pill bg-primary pulse-small">正在播放</span>' : ''}
+						${isHost ? `<button class="btn btn-link text-danger p-0 remove-track-btn" data-index="${index}" title="从列表中移除"><i class="fa fa-minus-circle"></i></button>` : ''}
 					</div>
 				</div>
 			`;
@@ -716,20 +733,19 @@ define('music', [
 		// 移除占位符
 		container.find('.text-center.text-muted').remove();
 
-		const time = new Date(message.timestamp).toLocaleTimeString();
+		const time = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 		const html = `
-			<div class="chat-message ${isOwn ? 'own' : ''} mb-2">
-				<div class="d-flex ${isOwn ? 'flex-row-reverse' : ''}">
-					<div class="mx-2">
-						<img src="${message.picture || '/assets/images/default-avatar.png'}" class="rounded-circle" style="width: 32px; height: 32px;">
+			<div class="chat-message ${isOwn ? 'own' : ''}">
+				<div class="message-header">
+					<span class="fw-bold me-1">${message.username}</span>
+					<span class="text-xs opacity-75">${time}</span>
+				</div>
+				<div class="d-flex align-items-start ${isOwn ? 'flex-row-reverse' : ''}">
+					<div class="flex-shrink-0">
+						<img src="${message.picture || '/assets/images/default-avatar.png'}" class="rounded-circle shadow-sm" style="width: 32px; height: 32px; object-fit: cover;">
 					</div>
-					<div>
-						<div class="text-sm ${isOwn ? 'text-end' : ''} text-muted">
-							<strong>${message.username}</strong> <span class="ms-2">${time}</span>
-						</div>
-						<div class="message-content ${isOwn ? 'bg-primary text-white' : 'bg-light'} p-2 rounded">
-							${message.content}
-						</div>
+					<div class="message-content mx-2">
+						${message.content}
 					</div>
 				</div>
 			</div>
