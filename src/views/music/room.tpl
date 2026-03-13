@@ -1,35 +1,223 @@
-<div class="row h-100">
+<!-- 全屏背景 -->
+<div class="music-room-bg"></div>
+
+<!-- 内容容器 -->
+<div class="music-room-wrapper">
+	<div class="row g-0">
 	<div class="h-100 {{{if widgets.sidebar.length }}}col-lg-9 col-sm-12{{{ else }}}col-lg-12{{{ end }}}">
 		<!-- 隐藏的音频元素 -->
 		<audio id="audio-player" style="display: none;"></audio>
 
 		<!-- 歌词样式 -->
 		<style>
+
+			#content > .container,
+			#content > .container-fluid {
+				margin: 0 !important;
+				padding: 0 !important;
+				max-width: 100% !important;
+			}
+
+			#panel {
+				margin: 0 !important;
+				padding: 0 !important;
+			}
+
+			#panel > .container,
+			#panel > .container-fluid {
+				margin: 0 !important;
+				padding: 0 !important;
+			}
+
+			/* 全屏背景层 */
+			.music-room-bg {
+				position: fixed;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				background-size: cover;
+				background-position: center;
+				background-repeat: no-repeat;
+				background-attachment: fixed;
+				transition: background-image 0.5s ease;
+				z-index: -2;
+			}
+
+			/* 毛玻璃效果背景层 */
+			.music-room-bg::after {
+				content: '';
+				position: fixed;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				background: rgba(255, 255, 255, 0.85);
+				backdrop-filter: blur(20px);
+				-webkit-backdrop-filter: blur(20px);
+				z-index: -1;
+				pointer-events: none;
+			}
+
+			/* 内容容器 - 保持原有宽度和居中 */
+			.music-room-wrapper {
+				position: relative;
+				z-index: 1;
+				max-width: 95%;
+				margin-left: auto !important;
+				margin-right: auto !important;
+				padding: 2rem 1rem 1rem 1rem;
+				width: 100%;
+			}
+
+			/* 确保 .row 元素也正确居中 */
+			.music-room-wrapper > .row {
+				margin-left: auto !important;
+				margin-right: auto !important;
+				max-width: 100%;
+			}
+
+			/* 侧边栏毛玻璃效果 */
+			[data-widget-area="sidebar"] {
+				position: relative;
+				z-index: 1;
+				background: rgba(255, 255, 255, 0.6);
+				backdrop-filter: blur(10px);
+				-webkit-backdrop-filter: blur(10px);
+				padding: 1rem;
+				border-radius: 12px;
+				margin-left: 0;
+				margin-right: 0;
+				margin-top: 2rem;
+			}
+
+			/* 确保内容在背景之上 */
+			.music-room-container {
+				position: relative;
+				z-index: 1;
+			}
+
+			/* 隐藏播放列表的滚动条 */
+			#playlist::-webkit-scrollbar {
+				width: 6px;
+			}
+			#playlist::-webkit-scrollbar-track {
+				background: transparent;
+			}
+			#playlist::-webkit-scrollbar-thumb {
+				background: rgba(0, 0, 0, 0.1);
+				border-radius: 3px;
+			}
+			#playlist::-webkit-scrollbar-thumb:hover {
+				background: rgba(0, 0, 0, 0.2);
+			}
+
+			/* 隐藏搜索结果区域的滚动条 */
+			#search-results::-webkit-scrollbar {
+				width: 6px;
+			}
+			#search-results::-webkit-scrollbar-track {
+				background: transparent;
+			}
+			#search-results::-webkit-scrollbar-thumb {
+				background: rgba(0, 0, 0, 0.1);
+				border-radius: 3px;
+			}
+			#search-results::-webkit-scrollbar-thumb:hover {
+				background: rgba(0, 0, 0, 0.2);
+			}
+
+			/* 确保列表项底部没有多余的样式 */
+			.list-group-item {
+				cursor: default;
+				border-bottom: none !important;
+				background-color: transparent !important;
+				border: none !important;
+			}
+			.list-group-item:last-child {
+				border-bottom: none !important;
+			}
+			.list-group-item.active {
+				background-color: rgba(0, 123, 255, 0.1) !important;
+				border: none !important;
+			}
+			.list-group-item:hover {
+				background-color: rgba(0, 123, 255, 0.05) !important;
+				box-shadow: none;
+				transform: none;
+			}
+
+			/* 隐藏list-group的默认边框 */
+			.list-group {
+				border: none !important;
+			}
+
+			/* 彻底隐藏所有滚动条 */
+			#playlist,
+			#search-results,
+			#lyrics-container,
+			#chat-messages {
+				-ms-overflow-style: none !important;
+				scrollbar-width: none !important;
+			}
+			#playlist::-webkit-scrollbar,
+			#search-results::-webkit-scrollbar,
+			#lyrics-container::-webkit-scrollbar,
+			#chat-messages::-webkit-scrollbar {
+				display: none !important;
+				width: 0 !important;
+				height: 0 !important;
+			}
+
 			.lyric-line {
 				padding: 8px;
 				opacity: 0.5;
 				transition: all 0.3s ease;
 				margin: 5px 0;
+				cursor: default;
 			}
 			.lyric-line.active {
 				opacity: 1;
 				color: #007bff;
 				font-weight: bold;
+				transform: scale(1.05);
 			}
 			.album-cover img {
 				width: 200px;
 				height: 200px;
 				object-fit: cover;
-				border-radius: 8px;
+				border-radius: 50%;
+				background-color: transparent;
+				background-image: none;
+				display: block;
+			}
+			#album-cover {
+				background-color: transparent;
+				background-image: none;
+				border-radius: 50%;
+				width: 200px;
+				height: 200px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+				overflow: hidden;
 			}
 			/* 确保音乐页面容器不会影响整体布局 */
 			.music-room-container {
 				max-width: 100%;
 				overflow: hidden;
 			}
+
+			/* 卡片半透明效果 */
+			.music-player, .chat-container {
+				background: rgba(255, 255, 255, 0.7) !important;
+				backdrop-filter: blur(10px);
+				-webkit-backdrop-filter: blur(10px);
+			}
 		</style>
 
-		<div class="music-room-container h-100 mt-3 mt-md-0 py-md-3">
+		<div class="music-room-container h-100">
 			<div class="d-flex flex-column gap-4">
 				<!-- 音乐播放器和歌词 -->
 				<div class="card music-player border-0 shadow-sm rounded-4 overflow-hidden">
@@ -99,19 +287,35 @@
 							<div class="card-body p-4">
 								<div id="playlist-container">
 									<!-- 搜索框 -->
-									<div class="input-group mb-4 shadow-sm rounded-pill overflow-hidden border">
-										<span class="input-group-text bg-white border-0 ps-3">
+									<div class="input-group mb-3 shadow-sm">
+										<span class="input-group-text bg-light border-0">
 											<i class="fa fa-search text-muted"></i>
 										</span>
-										<input type="text" id="music-search-input" class="form-control border-0 px-2" placeholder="搜索并添加音乐...">
-										<button id="search-track-btn" class="btn btn-primary px-4">
-											搜索
+										<input type="text" id="music-search-input" class="form-control" placeholder="搜索音乐...">
+										<button id="search-track-btn" class="btn btn-primary">
+											<i class="fa fa-search"></i>
 										</button>
 									</div>
 									<!-- 搜索结果 -->
-									<div id="search-results" class="list-group mb-4 shadow-sm rounded-3 overflow-hidden border" style="display: none; max-height: 300px; overflow-y: auto;"></div>
+									<div id="search-results-container" style="display: none;">
+										<div class="card border-0 shadow-sm mb-3">
+											<div class="card-body p-0">
+												<div id="search-results" class="list-group list-group-flush" style="max-height: 350px; overflow-y: auto;"></div>
+											</div>
+											<!-- 分页 -->
+											<div id="search-pagination" class="card-footer border-0 bg-light py-2 px-3 d-flex justify-content-between align-items-center" style="display: none;">
+												<button id="prev-page-btn" class="btn btn-sm btn-outline-primary" disabled>
+													<i class="fa fa-chevron-left"></i>
+												</button>
+												<span class="text-muted small">第 <span id="current-page">1</span> 页</span>
+												<button id="next-page-btn" class="btn btn-sm btn-outline-primary" disabled>
+													<i class="fa fa-chevron-right"></i>
+												</button>
+											</div>
+										</div>
+									</div>
 									<!-- 播放列表 -->
-									<div id="playlist" class="list-group list-group-flush custom-scrollbar" style="max-height: 400px; overflow-y: auto;">
+									<div id="playlist" class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
 										<div class="text-center text-muted py-5">
 											<i class="fa fa-compact-disc fa-3x mb-3 opacity-25 fa-spin"></i>
 											<p>播放列表为空</p>
@@ -130,7 +334,7 @@
 								<h5 class="card-title fw-bold mb-0"><i class="fa fa-comments text-primary me-2"></i>实时讨论</h5>
 							</div>
 							<div class="card-body p-4 d-flex flex-column">
-								<div id="chat-messages" class="chat-messages overflow-auto mb-4 flex-grow-1 custom-scrollbar" style="height: 400px; background: #f8f9fa; border-radius: 12px; padding: 15px;">
+								<div id="chat-messages" class="chat-messages overflow-auto mb-4 flex-grow-1" style="height: 400px; background: #f8f9fa; border-radius: 12px; padding: 15px;">
 									<div class="text-center text-muted py-3">
 										<p class="mb-0">正在连接聊天室...</p>
 									</div>
@@ -147,10 +351,5 @@
 				</div>
 			</div>
 		</div>
-	</div>
-	<div data-widget-area="sidebar" class="h-100 col-lg-3 col-sm-12 {{{ if !widgets.sidebar.length }}}hidden{{{ end }}}">
-		{{{ each widgets.sidebar }}}
-		{{widgets.sidebar.html}}
-		{{{ end }}}
 	</div>
 </div>
