@@ -9,7 +9,7 @@ define('music', [
 	let currentRoomId = null;
 	let isHost = false;
 	let playlist = [];
-	let currentTrackIndex = -1;
+	let currentTrack = null;
 	let audioPlayer = null;
 	let lyricsLines = [];
 	// 搜索分页相关变量
@@ -29,6 +29,14 @@ define('music', [
 		Music.removeListeners();
 
 		setupRoom();
+
+		// 注册页面跳转钩子，离开房间
+		$(window).one('action:ajaxify.start', function () {
+			if (currentRoomId) {
+				socket.emit('modules.music.leaveRoom', { roomId: currentRoomId });
+				currentRoomId = null;
+			}
+		});
 	};
 
 	Music.removeListeners = function () {
@@ -38,11 +46,13 @@ define('music', [
 		socket.removeListener('event:music.room.update', onRoomUpdate);
 		socket.removeListener('event:music.chat', onMusicChat);
 		socket.removeListener('event:music.playlist.update', onPlaylistUpdate);
+		socket.removeListener('event:music.vote.update', onVoteUpdate);
 
 		// 移除 DOM 事件监听器 - 防止重复绑定
-		$('#play-btn').off('click', togglePlay);
-		$('#prev-btn').off('click', prevTrack);
-		$('#next-btn').off('click', nextTrack);
+		$('#play-btn').off('click');
+		$('#prev-btn').off('click');
+		$('#next-btn').off('click');
+		$('#vote-skip-btn').off('click');
 		$('#search-track-btn').off('click', searchMusic);
 		$('#music-search-input').off('keypress');
 		$('#prev-page-btn').off('click');
@@ -86,6 +96,10 @@ define('music', [
 		$('#play-btn').on('click', togglePlay);
 		$('#prev-btn').on('click', prevTrack);
 		$('#next-btn').on('click', nextTrack);
+		$('#vote-skip-btn').on('click', voteSkip);
+
+		// 音量控制
+		initVolumeControl();
 
 		// 搜索音乐
 		$('#search-track-btn').on('click', searchMusic);
@@ -153,17 +167,47 @@ define('music', [
 		}
 	}
 
+	let lastTrackId = null;
+	let lastCoverUrl = null;
+	let lastPlaylistJson = null;
+
 	function updateRoomUI(room) {
 		$('#listener-count').text(room.listeners);
 
-		// 同步播放列表
+		// 更新投票显示
+		if (room.votes) {
+			// 如果当前用户已经投票，禁用按钮
+			if (room.votes.includes(parseInt(app.user.uid, 10))) {
+				$('#vote-skip-btn').prop('disabled', true).addClass('btn-secondary').removeClass('btn-outline-primary').html('<i class="fa fa-check me-1"></i> 已投票');
+			} else {
+				$('#vote-skip-btn').prop('disabled', false).addClass('btn-outline-primary').removeClass('btn-secondary').html('<i class="fa fa-forward me-1"></i> 投票切歌');
+			}
+		}
+
+		// 同步播放列表 (仅当发生变化时更新 UI)
 		if (room.playlist && Array.isArray(room.playlist)) {
-			playlist = room.playlist;
-			updatePlaylistUI();
+			const currentPlaylistJson = JSON.stringify(room.playlist);
+			let playlistChanged = false;
 			
-			// 更新当前播放索引
+			if (lastPlaylistJson !== currentPlaylistJson) {
+				lastPlaylistJson = currentPlaylistJson;
+				playlist = room.playlist;
+				playlistChanged = true;
+			}
+			
+			// 更新当前播放
 			if (room.currentTrack) {
-				currentTrackIndex = playlist.findIndex(t => t.id === room.currentTrack.id);
+				if (!currentTrack || room.currentTrack.id !== currentTrack.id) {
+					currentTrack = room.currentTrack;
+					playlistChanged = true;
+				}
+			} else if (currentTrack) {
+				currentTrack = null;
+				playlistChanged = true;
+			}
+
+			if (playlistChanged) {
+				updatePlaylistUI();
 			}
 		}
 
@@ -173,13 +217,24 @@ define('music', [
 
 			const albumCover = $('#album-cover');
 			if (room.currentTrack.cover) {
-				albumCover.html(`<img src="${room.currentTrack.cover}" alt="专辑封面" class="rounded-circle shadow-lg">`);
-				// 更新页面背景图
-				updatePageBackground(room.currentTrack.cover);
+				// 仅当封面 URL 改变时才更新，防止重复加载
+				if (lastCoverUrl !== room.currentTrack.cover) {
+					lastCoverUrl = room.currentTrack.cover;
+					albumCover.html(`<img src="${room.currentTrack.cover}" alt="专辑封面" class="rounded-circle shadow-lg" onerror="this.onerror=null; $(this).replaceWith('<i class=\'fa fa-music fa-5x\'></i>'); $('.music-room-bg').css('background-image', 'none');">`);
+					// 更新页面背景图
+					updatePageBackground(room.currentTrack.cover);
+				}
 			} else {
+				lastCoverUrl = null;
 				albumCover.html(`<i class="fa fa-music fa-5x"></i>`);
 				// 清除背景图
 				clearPageBackground();
+			}
+
+			// 获取歌词 (如果歌曲发生变化)
+			if (lastTrackId !== room.currentTrack.id) {
+				lastTrackId = room.currentTrack.id;
+				fetchLyrics(room.currentTrack.id);
 			}
 
 			// 更新播放按钮状态和封面旋转
@@ -196,52 +251,61 @@ define('music', [
 
 			// 同步音频播放器的播放进度
 			if (audioPlayer && room.currentTrack.url) {
+				// 计算目标播放时间
+				let targetTime = room.currentTime || 0;
+				if (room.isPlaying && room.startTime > 0) {
+					targetTime = (Date.now() - room.startTime) / 1000;
+				}
+
 				// 如果当前播放的歌曲与房间中的歌曲不同，设置新的歌曲
 				if (audioPlayer.src !== room.currentTrack.url) {
 					audioPlayer.src = room.currentTrack.url;
 					
 					// 加载音频后设置时间
 					audioPlayer.onloadeddata = function() {
-						if (room.currentTime && room.currentTime > 0) {
-							audioPlayer.currentTime = room.currentTime;
+						if (targetTime > 0) {
+							audioPlayer.currentTime = targetTime;
 						}
 						if (room.isPlaying) {
-							audioPlayer.play();
+							audioPlayer.play().catch(function(e) {
+								console.warn('[Music] Autoplay blocked or failed:', e);
+							});
 						} else {
 							audioPlayer.pause();
 						}
 					};
 				} else {
-					// 歌曲相同，直接设置播放进度
-					if (room.currentTime && room.currentTime > 0) {
-						audioPlayer.currentTime = room.currentTime;
-					}
+					// 歌曲相同，检查播放状态
 					if (room.isPlaying) {
-						audioPlayer.play();
+						if (audioPlayer.paused) {
+							audioPlayer.play().catch(function(e) {
+								console.warn('[Music] Play blocked or failed:', e);
+							});
+						}
+						// 只有当时间差距较大时才进行进度同步，避免播放抖动
+						if (Math.abs(audioPlayer.currentTime - targetTime) > 2) {
+							audioPlayer.currentTime = targetTime;
+						}
 					} else {
-						audioPlayer.pause();
+						if (!audioPlayer.paused) {
+							audioPlayer.pause();
+						}
+						audioPlayer.currentTime = targetTime;
 					}
 				}
 				
 				// 更新进度显示
-				if (room.currentTime) {
-					$('#current-time').text(formatTime(room.currentTime));
-					const progress = (room.currentTime / audioPlayer.duration) * 100 || 0;
-					$('#progress-bar').css('width', progress + '%');
-				}
+				const displayTime = room.isPlaying ? (audioPlayer.currentTime || targetTime) : targetTime;
+				$('#current-time').text(formatTime(displayTime));
+				const progress = (displayTime / audioPlayer.duration) * 100 || 0;
+				$('#progress-bar').css('width', progress + '%');
 			}
 		}
 
-		// 更新房主状态
-		if (isHost) {
-			$('#play-btn').prop('disabled', false);
-			$('#prev-btn').prop('disabled', false);
-			$('#next-btn').prop('disabled', false);
-		} else {
-			$('#play-btn').prop('disabled', true);
-			$('#prev-btn').prop('disabled', true);
-			$('#next-btn').prop('disabled', true);
-		}
+		// 更新房主状态 - 房主不再拥有控制播放的特权，所有控制通过投票或自动流程完成
+		$('#play-btn').prop('disabled', true);
+		$('#prev-btn').prop('disabled', true);
+		$('#next-btn').prop('disabled', true);
 	}
 
 	// 更新页面背景图
@@ -256,37 +320,37 @@ define('music', [
 
 	function onMusicPlay(data) {
 		if (data.track) {
-			currentTrackIndex = playlist.findIndex(t => t.id === data.track.id);
+			currentTrack = data.track;
 			
-			// 如果歌曲不在播放列表中，添加到播放列表
-			if (currentTrackIndex === -1) {
-				playlist.push(data.track);
-				currentTrackIndex = playlist.length - 1;
-				updatePlaylistUI();
-			}
+			// 立即从本地播放列表中移除正在播放的这首歌，防止重复显示
+			playlist = playlist.filter(t => t.id !== data.track.id);
+			lastPlaylistJson = JSON.stringify(playlist); // 同步更新缓存
 			
-			playTrack(data.track, data.currentTime || 0);
 			updateRoomUI({
 				currentTrack: data.track,
 				isPlaying: true,
 				currentTime: data.currentTime || 0,
+				startTime: data.startTime || 0,
+				listeners: $('#listener-count').text() || 0,
+				playlist: playlist,
 			});
 		}
 	}
 
 	function onMusicPause(data) {
-		if (audioPlayer) {
-			audioPlayer.pause();
-		}
 		updateRoomUI({
 			currentTrack: getCurrentTrack(),
 			isPlaying: false,
 			currentTime: data.currentTime,
+			startTime: 0,
+			listeners: $('#listener-count').text() || 0,
+			playlist: playlist,
 		});
 	}
 
 	function onRoomUpdate(data) {
 		if (data.room) {
+			currentTrack = data.room.currentTrack;
 			updateRoomUI(data.room);
 		}
 	}
@@ -298,7 +362,14 @@ define('music', [
 	function onPlaylistUpdate(data) {
 		if (data.playlist) {
 			playlist = data.playlist;
+			lastPlaylistJson = JSON.stringify(playlist); // 同步更新缓存，防止 updateRoomUI 重复触发
 			updatePlaylistUI();
+		}
+	}
+
+	function onVoteUpdate(data) {
+		if (data.votes.includes(parseInt(app.user.uid, 10))) {
+			$('#vote-skip-btn').prop('disabled', true).addClass('btn-secondary').removeClass('btn-outline-primary').html('<i class="fa fa-check me-1"></i> 已投票');
 		}
 	}
 
@@ -308,45 +379,27 @@ define('music', [
 		socket.on('event:music.room.update', onRoomUpdate);
 		socket.on('event:music.chat', onMusicChat);
 		socket.on('event:music.playlist.update', onPlaylistUpdate);
+		socket.on('event:music.vote.update', onVoteUpdate);
+	}
+
+	async function voteSkip() {
+		if (!currentRoomId) return;
+		
+		try {
+			await socket.emit('modules.music.voteSkip', { roomId: currentRoomId });
+		} catch (err) {
+			console.error('Failed to vote skip:', err);
+			alerts.alert({
+				title: '错误',
+				message: err.message || '投票失败',
+				type: 'error',
+			});
+		}
 	}
 
 	async function togglePlay() {
-		if (!isHost) return;
-
-		try {
-			if (audioPlayer && audioPlayer.src) {
-				// 检查当前播放的歌曲是否在播放列表中
-				const currentTrack = getCurrentTrack();
-				if (!currentTrack && playlist.length > 0) {
-					// 如果播放列表中有歌曲但没有当前播放的歌曲，播放第一首
-					currentTrackIndex = 0;
-					await socket.emit('modules.music.play', { roomId: currentRoomId, track: playlist[0] });
-				} else if (audioPlayer.paused) {
-					audioPlayer.play();
-					// 同步播放状态到服务器
-					socket.emit('modules.music.play', { roomId: currentRoomId, track: currentTrack }).catch(err => {
-						console.error('Failed to sync play:', err);
-					});
-				} else {
-					audioPlayer.pause();
-					// 同步暂停状态到服务器
-					socket.emit('modules.music.pause', { roomId: currentRoomId }).catch(err => {
-						console.error('Failed to sync pause:', err);
-					});
-				}
-			} else {
-				const track = getCurrentTrack();
-				if (track) {
-					await socket.emit('modules.music.play', { roomId: currentRoomId, track: track });
-				} else if (playlist.length > 0) {
-					// 播放列表中有歌曲但没有当前播放的歌曲，播放第一首
-					currentTrackIndex = 0;
-					await socket.emit('modules.music.play', { roomId: currentRoomId, track: playlist[0] });
-				}
-			}
-		} catch (err) {
-			console.error('Failed to toggle play:', err);
-		}
+		// 功能已禁用，保持空实现或移除调用
+		return;
 	}
 
 	function isPlaying() {
@@ -373,7 +426,7 @@ define('music', [
 
 		// 更新专辑封面
 		if (track.cover) {
-			$('#album-cover').html(`<img src="${track.cover}" alt="专辑封面" class="rounded-circle shadow-lg">`);
+			$('#album-cover').html(`<img src="${track.cover}" alt="专辑封面" class="rounded-circle shadow-lg" onerror="this.onerror=null; $(this).replaceWith('<i class=\'fa fa-music fa-5x\'></i>'); $('.music-room-bg').css('background-image', 'none');">`);
 			// 更新页面背景图
 			updatePageBackground(track.cover);
 		} else {
@@ -477,11 +530,15 @@ define('music', [
 		$('#current-time').text(formatTime(currentTime));
 
 		// 同步播放进度给服务器（如果是房主）
-		if (isHost && currentRoomId && Math.abs(currentTime - lastSyncTime) > 0.5) {
-			lastSyncTime = currentTime;
-			socket.emit('modules.music.sync', { roomId: currentRoomId, currentTime: currentTime }).catch(err => {
-				console.error('Failed to sync playback time:', err);
-			});
+		// 使用 startTime 后，房主不再需要频繁同步，只有在手动调整进度或每隔 10 秒同步一次作为兜底
+		if (isHost && currentRoomId) {
+			const timeDiff = Math.abs(currentTime - lastSyncTime);
+			if (timeDiff > 10 || (timeDiff > 2 && !audioPlayer.paused)) {
+				lastSyncTime = currentTime;
+				socket.emit('modules.music.sync', { roomId: currentRoomId, currentTime: currentTime }).catch(err => {
+					console.error('Failed to sync playback time:', err);
+				});
+			}
 		}
 
 		// 如果没有歌词，直接返回
@@ -538,47 +595,22 @@ define('music', [
 
 	// 音频播放结束
 	function onTrackEnded() {
-		if (isHost) {
-			// 移除已播放的歌曲，并同步到服务器
-			if (currentTrackIndex >= 0 && currentTrackIndex < playlist.length) {
-				socket.emit('modules.music.removeFromPlaylist', { roomId: currentRoomId, index: currentTrackIndex }).catch(err => {
-					console.error('Failed to remove track from playlist:', err);
-				});
-				playlist.splice(currentTrackIndex, 1);
-				currentTrackIndex--;
-				updatePlaylistUI();
-			}
-			// 播放下一首
-			nextTrack();
+		// 房主负责触发下一首逻辑，服务器端 Music.play 会处理播放列表移除
+		if (isHost && playlist.length > 0) {
+			socket.emit('modules.music.play', { roomId: currentRoomId, track: playlist[0] }).catch(err => {
+				console.error('Failed to play next track:', err);
+			});
 		}
 	}
 
 	async function prevTrack() {
-		if (!isHost || playlist.length === 0) return;
-
-		if (currentTrackIndex > 0) {
-			currentTrackIndex--;
-			const track = playlist[currentTrackIndex];
-			try {
-				await socket.emit('modules.music.play', { roomId: currentRoomId, track: track });
-			} catch (err) {
-				console.error('Failed to play prev track:', err);
-			}
-		}
+		// 功能已禁用
+		return;
 	}
 
 	async function nextTrack() {
-		if (!isHost || playlist.length === 0) return;
-
-		if (currentTrackIndex < playlist.length - 1) {
-			currentTrackIndex++;
-			const track = playlist[currentTrackIndex];
-			try {
-				await socket.emit('modules.music.play', { roomId: currentRoomId, track: track });
-			} catch (err) {
-				console.error('Failed to play next track:', err);
-			}
-		}
+		// 功能已禁用，切歌由投票逻辑触发
+		return;
 	}
 
 	// 搜索音乐
@@ -726,26 +758,18 @@ define('music', [
 					url: data.data,
 				};
 
-				// 如果用户是房主，同步播放列表到服务器
-				if (isHost) {
-					socket.emit('modules.music.addToPlaylist', { roomId: currentRoomId, track: track }).catch(err => {
-						console.error('Failed to add track to playlist:', err);
+				// 将歌曲添加到播放列表
+				const addResponse = await socket.emit('modules.music.addToPlaylist', { roomId: currentRoomId, track: track });
+				if (addResponse && addResponse.alreadyExists) {
+					alerts.alert({
+						title: '提示',
+						message: '歌曲已在播放列表中',
+						type: 'info',
 					});
 				}
-				
-				playlist.push(track);
-				updatePlaylistUI();
 
 				// 隐藏搜索结果
 				$('#search-results-container').hide();
-
-				// 不立即播放，只有当播放列表为空时才自动播放
-				if (isHost && playlist.length === 1) {
-					currentTrackIndex = 0;
-					socket.emit('modules.music.play', { roomId: currentRoomId, track: track }).catch(err => {
-						console.error('Failed to play track:',  err);
-					});
-				}
 			} catch (err) {
 				console.error('Add song failed:', err);
 				alerts.alert({
@@ -773,42 +797,28 @@ define('music', [
 
 		let html = '';
 		playlist.forEach(function (track, index) {
-			const active = index === currentTrackIndex;
+			// 如果歌曲正在播放，不显示在待播列表中
+			if (currentTrack && track.id === currentTrack.id) {
+				return;
+			}
+
 			html += `
-				<div class="list-group-item d-flex align-items-center ${active ? 'active' : ''} border-0 mb-2 rounded-3 shadow-sm" data-index="${index}" style="cursor: pointer;">
+				<div class="list-group-item d-flex align-items-center border-0 mb-2 rounded-3 shadow-sm" data-trackid="${track.id}">
 					<div class="flex-shrink-0 me-3">
-						${track.cover ? `<img src="${track.cover}" class="rounded-3 shadow-sm" style="width: 48px; height: 48px; object-fit: cover;">` : '<div class="bg-light rounded-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;"><i class="fa fa-music text-muted"></i></div>'}
+						${track.cover ? `<img src="${track.cover}" class="rounded-3 shadow-sm" style="width: 48px; height: 48px; object-fit: cover;" onerror="this.onerror=null; $(this).replaceWith('<div class=\'bg-light rounded-3 d-flex align-items-center justify-content-center\' style=\'width: 48px; height: 48px;\'><i class=\'fa fa-music text-muted\'></i></div>');">` : '<div class="bg-light rounded-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;"><i class="fa fa-music text-muted"></i></div>'}
 					</div>
 					<div class="flex-grow-1 overflow-hidden me-2">
-						<div class="text-truncate fw-bold mb-0 ${active ? 'text-primary' : ''}">${track.name}</div>
-						<div class="text-xs text-muted text-truncate">${track.artist || '-'}</div>
-					</div>
-					<div class="flex-shrink-0 d-flex align-items-center gap-2">
-						${active ? '<span class="badge rounded-pill bg-primary pulse-small">正在播放</span>' : ''}
-						${isHost ? `<button class="btn btn-link text-danger p-0 remove-track-btn" data-index="${index}" title="从列表中移除"><i class="fa fa-minus-circle"></i></button>` : ''}
+						<div class="text-truncate fw-bold mb-0">${track.name}</div>
+						<div class="text-xs text-muted text-truncate d-flex justify-content-between">
+							<span>${track.artist || '-'}</span>
+							<span class="text-primary opacity-75 small"><i class="fa fa-user-plus me-1"></i>${track.addedBy || '系统'}</span>
+						</div>
 					</div>
 				</div>
 			`;
 		});
 
 		container.html(html);
-
-		// 删除歌曲按钮
-		$('.remove-track-btn').on('click', function () {
-			if (!isHost) return;
-			const index = $(this).data('index');
-			
-			// 同步删除到服务器
-			socket.emit('modules.music.removeFromPlaylist', { roomId: currentRoomId, index: index }).catch(err => {
-				console.error('Failed to remove track from playlist:', err);
-			});
-			
-			playlist.splice(index, 1);
-			if (currentTrackIndex >= index) {
-				currentTrackIndex--;
-			}
-			updatePlaylistUI();
-		});
 	}
 
 	function sendChatMessage() {
@@ -833,6 +843,21 @@ define('music', [
 		// 移除占位符
 		container.find('.text-center.text-muted').remove();
 
+		// 处理系统消息
+		if (message.system) {
+			const time = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+			const systemHtml = `
+				<div class="chat-message system text-center my-2">
+					<span class="badge rounded-pill bg-light text-muted border shadow-sm px-3 py-2">
+						<i class="fa fa-info-circle me-1"></i> ${message.content} <small class="ms-2 opacity-75">${time}</small>
+					</span>
+				</div>
+			`;
+			container.append(systemHtml);
+			container.scrollTop(container[0].scrollHeight);
+			return;
+		}
+
 		const time = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 		const html = `
 			<div class="chat-message ${isOwn ? 'own' : ''}">
@@ -856,16 +881,96 @@ define('music', [
 	}
 
 	function getCurrentTrack() {
-		if (currentTrackIndex >= 0 && currentTrackIndex < playlist.length) {
-			return playlist[currentTrackIndex];
+		return currentTrack;
+	}
+
+	function getCurrentTrackIndex() {
+		if (!currentTrack || !playlist || !playlist.length) {
+			return -1;
 		}
-		return null;
+		return playlist.findIndex(t => t.id === currentTrack.id);
 	}
 
 	function formatTime(seconds) {
 		const mins = Math.floor(seconds / 60);
 		const secs = Math.floor(seconds % 60);
 		return mins + ':' + (secs < 10 ? '0' : '') + secs;
+	}
+
+	function initVolumeControl() {
+		const volumeSlider = $('#volume-slider');
+		const muteBtn = $('#mute-btn');
+		const volumePercent = $('#volume-percent');
+		
+		// 从缓存加载音量
+		let savedVolume = localStorage.getItem('music_room_volume');
+		if (savedVolume === null) {
+			savedVolume = 1;
+		} else {
+			savedVolume = parseFloat(savedVolume);
+		}
+
+		let isMuted = localStorage.getItem('music_room_muted') === 'true';
+		let lastVolume = savedVolume || 1;
+
+		// 应用初始音量
+		updateVolume(isMuted ? 0 : savedVolume);
+		volumeSlider.val(savedVolume);
+		updateVolumeUI(isMuted ? 0 : savedVolume);
+
+		// 监听滑块变化
+		volumeSlider.on('input', function() {
+			const val = parseFloat($(this).val());
+			isMuted = val === 0;
+			updateVolume(val);
+			updateVolumeUI(val);
+			
+			// 只有非 0 时才更新上次音量
+			if (val > 0) {
+				lastVolume = val;
+			}
+			
+			// 缓存
+			localStorage.setItem('music_room_volume', val);
+			localStorage.setItem('music_room_muted', isMuted);
+		});
+
+		// 监听静音按钮
+		muteBtn.on('click', function() {
+			isMuted = !isMuted;
+			const targetVolume = isMuted ? 0 : lastVolume;
+			
+			updateVolume(targetVolume);
+			volumeSlider.val(targetVolume);
+			updateVolumeUI(targetVolume);
+			
+			localStorage.setItem('music_room_muted', isMuted);
+		});
+
+		function updateVolume(val) {
+			if (audioPlayer) {
+				audioPlayer.volume = val;
+			}
+		}
+
+		function updateVolumeUI(val) {
+			// 更新百分比文字
+			volumePercent.text(Math.round(val * 100) + '%');
+			
+			// 更新图标
+			const icon = muteBtn.find('i');
+			icon.removeClass('fa-volume-up fa-volume-down fa-volume-off fa-volume-mute');
+			
+			if (val === 0) {
+				icon.addClass('fa-volume-mute');
+			} else if (val < 0.3) {
+				icon.addClass('fa-volume-off');
+			} else if (val < 0.7) {
+				icon.addClass('fa-volume-down');
+			} else {
+				icon.addClass('fa-volume-up');
+			}
+		}
 	}
 
 	// 监听页面跳转事件，清理事件监听器

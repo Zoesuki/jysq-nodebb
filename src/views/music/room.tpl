@@ -248,16 +248,21 @@
 								</div>
 
 								<!-- 控制按钮 -->
-								<div class="d-flex justify-content-center align-items-center gap-4">
-									<button id="prev-btn" class="btn btn-link text-dark p-0" title="上一首">
-										<i class="fa fa-step-backward fa-2x"></i>
+								<div class="d-flex justify-content-center align-items-center gap-4 mb-4">
+									<div class="d-none">
+										<button id="prev-btn"></button>
+										<button id="play-btn"></button>
+										<button id="next-btn"></button>
+									</div>
+								</div>
+
+								<!-- 音量控制 -->
+								<div class="volume-control d-flex align-items-center justify-content-center gap-3 px-4">
+									<button id="mute-btn" class="btn btn-link text-dark p-0" title="静音/取消静音">
+										<i class="fa fa-volume-up"></i>
 									</button>
-									<button id="play-btn" class="btn btn-primary btn-lg rounded-circle shadow" style="width: 64px; height: 64px;" title="播放/暂停">
-										<i class="fa fa-play"></i>
-									</button>
-									<button id="next-btn" class="btn btn-link text-dark p-0" title="下一首">
-										<i class="fa fa-step-forward fa-2x"></i>
-									</button>
+									<input type="range" id="volume-slider" class="form-range flex-grow-1" min="0" max="1" step="0.01" value="1" style="max-width: 150px;">
+									<span id="volume-percent" class="text-xs text-muted" style="min-width: 35px;">100%</span>
 								</div>
 							</div>
 
@@ -330,13 +335,18 @@
 					<!-- 聊天区域 -->
 					<div class="col-lg-6">
 						<div class="card h-100 border-0 shadow-sm rounded-4 chat-container">
-							<div class="card-header bg-transparent border-0 pt-4 px-4">
+							<div class="card-header bg-transparent border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
 								<h5 class="card-title fw-bold mb-0"><i class="fa fa-comments text-primary me-2"></i>实时讨论</h5>
+								<div id="vote-skip-container" class="d-flex align-items-center gap-2">
+									<button id="vote-skip-btn" class="btn btn-sm btn-outline-primary rounded-pill px-3" title="投票切换下一首">
+										<i class="fa fa-forward me-1"></i> 投票切歌
+									</button>
+								</div>
 							</div>
 							<div class="card-body p-4 d-flex flex-column">
 								<div id="chat-messages" class="chat-messages overflow-auto mb-4 flex-grow-1" style="height: 400px; background: #f8f9fa; border-radius: 12px; padding: 15px;">
 									<div class="text-center text-muted py-3">
-										<p class="mb-0">正在连接聊天室...</p>
+										<p class="mb-0">还没有人说话</p>
 									</div>
 								</div>
 								<div class="input-group shadow-sm rounded-pill overflow-hidden border">

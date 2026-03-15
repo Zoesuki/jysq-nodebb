@@ -6,6 +6,26 @@ const Music = module.exports;
 
 // 存储房间信息
 const musicRooms = new Map();
+// 存储每个 socket 所在的房间
+const socketToRooms = new Map();
+
+// 初始化，注册断开连接的钩子
+setTimeout(() => {
+	const plugins = require('../plugins');
+	plugins.hooks.register('music', {
+		hook: 'action:sockets.disconnect',
+		method: function (data) {
+			const { socket } = data;
+			const roomIds = socketToRooms.get(socket.id);
+			if (roomIds) {
+				for (const roomId of roomIds) {
+					Music.leaveRoom(socket, { roomId });
+				}
+				socketToRooms.delete(socket.id);
+			}
+		},
+	});
+}, 0);
 
 // 加入听歌房间
 Music.joinRoom = async function (socket, data) {
@@ -16,50 +36,61 @@ Music.joinRoom = async function (socket, data) {
 
 	socket.join(`music_room_${roomId}`);
 
+	// 记录 socket 所在的房间
+	if (!socketToRooms.has(socket.id)) {
+		socketToRooms.set(socket.id, new Set());
+	}
+	socketToRooms.get(socket.id).add(roomId);
+
 	// 初始化房间信息
 	if (!musicRooms.has(roomId)) {
 		musicRooms.set(roomId, {
+			roomId: roomId,
 			currentTrack: null,
 			isPlaying: false,
 			currentTime: 0,
-			listeners: [],
+			startTime: 0,
+			listeners: [], // 存储 { socketId, uid }
 			hostId: socket.uid,
 			createdAt: Date.now(),
-			playlist: []
+			playlist: [],
+			votes: new Set() // 存储投票切歌的 uid
 		});
 	}
 
 	const room = musicRooms.get(roomId);
 
+	// 计算当前播放进度
+	let currentTime = room.currentTime;
+	if (room.isPlaying && room.startTime > 0) {
+		currentTime = (Date.now() - room.startTime) / 1000;
+	}
+
 	// 添加监听者
-	if (!room.listeners.includes(socket.uid)) {
-		room.listeners.push(socket.uid);
+	if (!room.listeners.some(l => l.socketId === socket.id)) {
+		room.listeners.push({ socketId: socket.id, uid: socket.uid });
 	}
 
 	// 向房间内所有用户发送更新
 	const io = require('./index').server;
+	const roomInfo = {
+		roomId: roomId,
+		currentTrack: room.currentTrack,
+		isPlaying: room.isPlaying,
+		currentTime: currentTime,
+		startTime: room.startTime,
+		listeners: _.uniqBy(room.listeners, 'uid').length,
+		isHost: room.hostId === socket.uid,
+		playlist: room.playlist,
+		votes: Array.from(room.votes)
+	};
+
 	io.to(`music_room_${roomId}`).emit('event:music.room.update', {
-		room: {
-			roomId: roomId,
-			currentTrack: room.currentTrack,
-			isPlaying: room.isPlaying,
-			currentTime: room.currentTime,
-			listeners: room.listeners.length,
-			isHost: room.hostId === socket.uid,
-			playlist: room.playlist
-		}
+		room: roomInfo
 	});
 
 	return {
-		room: {
-			roomId: roomId,
-			currentTrack: room.currentTrack,
-			isPlaying: room.isPlaying,
-			currentTime: room.currentTime,
-			listeners: room.listeners.length,
-			isHost: room.hostId === socket.uid,
-			playlist: room.playlist
-		}
+		room: roomInfo
 	};
 };
 
@@ -67,10 +98,18 @@ Music.joinRoom = async function (socket, data) {
 Music.leaveRoom = async function (socket, data) {
 	const { roomId } = data;
 	if (!roomId) {
-		throw new Error('Invalid room ID');
+		return;
 	}
 
 	socket.leave(`music_room_${roomId}`);
+
+	// 移除 socket 所在的房间记录
+	if (socketToRooms.has(socket.id)) {
+		socketToRooms.get(socket.id).delete(roomId);
+		if (socketToRooms.get(socket.id).size === 0) {
+			socketToRooms.delete(socket.id);
+		}
+	}
 
 	const room = musicRooms.get(roomId);
 	if (!room) {
@@ -78,7 +117,8 @@ Music.leaveRoom = async function (socket, data) {
 	}
 
 	// 移除监听者
-	room.listeners = room.listeners.filter(uid => uid !== socket.uid);
+	const leavingUser = room.listeners.find(l => l.socketId === socket.id);
+	room.listeners = room.listeners.filter(l => l.socketId !== socket.id);
 
 	// 如果房间没有监听者了，清理房间
 	if (room.listeners.length === 0) {
@@ -86,28 +126,36 @@ Music.leaveRoom = async function (socket, data) {
 		return;
 	}
 
-	// 如果是房主离开，重新分配房主
-	if (room.hostId === socket.uid && room.listeners.length > 0) {
-		room.hostId = room.listeners[0];
+	// 如果是房主离开（且房主没有其他 socket 在房间里了）
+	const hostStillConnected = room.listeners.some(l => l.uid === room.hostId);
+	if (!hostStillConnected && leavingUser && leavingUser.uid === room.hostId) {
+		// 重新分配房主给第一个在房间里的其他用户
+		room.hostId = room.listeners[0].uid;
 	}
 
 	// 向房间内其他用户发送更新
 	const io = require('./index').server;
-	io.to(`music_room_${roomId}`).emit('event:music.room.update', {
-		room: {
-			roomId: room.roomId,
-			currentTrack: room.currentTrack,
-			isPlaying: room.isPlaying,
-			currentTime: room.currentTime,
-			listeners: room.listeners.length,
-			isHost: room.hostId === socket.uid,
-			playlist: room.playlist
-		}
-	});
 	
-	// 通知所有用户播放列表已更新
-	io.to(`music_room_${roomId}`).emit('event:music.playlist.update', {
-		playlist: room.playlist
+	// 计算当前播放进度
+	let currentTime = room.currentTime;
+	if (room.isPlaying && room.startTime > 0) {
+		currentTime = (Date.now() - room.startTime) / 1000;
+	}
+
+	const roomInfo = {
+		roomId: room.roomId,
+		currentTrack: room.currentTrack,
+		isPlaying: room.isPlaying,
+		currentTime: currentTime,
+		startTime: room.startTime,
+		listeners: _.uniqBy(room.listeners, 'uid').length,
+		playlist: room.playlist,
+		votes: Array.from(room.votes)
+	};
+
+	// 广播更新
+	io.to(`music_room_${roomId}`).emit('event:music.room.update', {
+		room: roomInfo
 	});
 };
 
@@ -123,82 +171,56 @@ Music.play = async function (socket, data) {
 		throw new Error('Room not found');
 	}
 
-	// 只有房主可以控制播放
+	// 只有房主可以手动切换播放（通过点击列表）
 	if (room.hostId !== socket.uid) {
 		throw new Error('Only host can control playback');
 	}
 
+	await Music.doPlay(roomId, track);
+};
+
+// 内部执行播放逻辑
+Music.doPlay = async function (roomId, track) {
+	const room = musicRooms.get(roomId);
+	if (!room) return;
+
 	room.currentTrack = track;
 	room.isPlaying = true;
 	room.currentTime = 0;
+	room.startTime = Date.now();
+	room.votes = new Set(); // 播放新歌曲时重置投票
 	
-	// 如果歌曲不在播放列表中，将其添加到播放列表中
-	const exists = room.playlist.find(t => t.id === track.id);
-	if (!exists) {
-		room.playlist.push(track);
+	// 从播放列表中移除该歌曲（如果存在），确保它作为“正在播放”的歌曲从“待播列表”中移除
+	const currentIndex = room.playlist.findIndex(t => t.id === track.id);
+	if (currentIndex !== -1) {
+		room.playlist.splice(currentIndex, 1);
 	}
 
 	const io = require('./index').server;
 	io.to(`music_room_${roomId}`).emit('event:music.play', {
 		track: track,
-		currentTime: 0
+		currentTime: 0,
+		startTime: room.startTime
 	});
 
-	io.to(`music_room_${roomId}`).emit('event:music.room.update', {
-		room: {
-			roomId: roomId,
-			currentTrack: room.currentTrack,
-			isPlaying: room.isPlaying,
-			currentTime: room.currentTime,
-			listeners: room.listeners.length,
-			isHost: room.hostId === socket.uid,
-			playlist: room.playlist
+	io.to(`music_room_${roomId}`).emit('event:music.chat', {
+		message: {
+			username: '系统',
+			content: `正在播放歌曲：${track.name}`,
+			timestamp: Date.now(),
+			system: true
 		}
 	});
 
-	// 如果有新歌曲添加到播放列表，通知所有人
-	if (!exists) {
-		io.to(`music_room_${roomId}`).emit('event:music.playlist.update', {
-			playlist: room.playlist
-		});
-	}
+	// 通知所有用户播放列表已更新
+	io.to(`music_room_${roomId}`).emit('event:music.playlist.update', {
+		playlist: room.playlist
+	});
 };
 
-// 暂停音乐
-Music.pause = async function (socket, data) {
-	const { roomId } = data;
-	if (!roomId) {
-		throw new Error('Invalid room ID');
-	}
-
-	const room = musicRooms.get(roomId);
-	if (!room) {
-		throw new Error('Room not found');
-	}
-
-	// 只有房主可以控制播放
-	if (room.hostId !== socket.uid) {
-		throw new Error('Only host can control playback');
-	}
-
-	room.isPlaying = false;
-
-	const io = require('./index').server;
-	io.to(`music_room_${roomId}`).emit('event:music.pause', {
-		currentTime: room.currentTime
-	});
-
-	io.to(`music_room_${roomId}`).emit('event:music.room.update', {
-		room: {
-			roomId: roomId,
-			currentTrack: room.currentTrack,
-			isPlaying: room.isPlaying,
-			currentTime: room.currentTime,
-			listeners: room.listeners.length,
-			isHost: room.hostId === socket.uid,
-			playlist: room.playlist
-		}
-	});
+// 暂停音乐已移除，改为投票切歌模式
+Music.pause = async function () {
+	throw new Error('Pause functionality is disabled. Use voting to skip tracks.');
 };
 
 // 同步播放进度
@@ -213,7 +235,17 @@ Music.sync = async function (socket, data) {
 		return;
 	}
 
+	// 只有房主可以同步进度
+	if (room.hostId !== socket.uid) {
+		return;
+	}
+
 	room.currentTime = currentTime;
+	
+	// 如果正在播放，同步更新 startTime 以维持进度一致
+	if (room.isPlaying) {
+		room.startTime = Date.now() - (currentTime * 1000);
+	}
 
 	// 同步播放进度给所有用户
 	const io = require('./index').server;
@@ -223,8 +255,8 @@ Music.sync = async function (socket, data) {
 			currentTrack: room.currentTrack,
 			isPlaying: room.isPlaying,
 			currentTime: room.currentTime,
-			listeners: room.listeners.length,
-			isHost: room.hostId === socket.uid,
+			startTime: room.startTime,
+			listeners: _.uniqBy(room.listeners, 'uid').length,
 			playlist: room.playlist
 		}
 	});
@@ -242,13 +274,20 @@ Music.getRoomInfo = async function (socket, data) {
 		throw new Error('Room not found');
 	}
 
+	// 计算当前播放进度
+	let currentTime = room.currentTime;
+	if (room.isPlaying && room.startTime > 0) {
+		currentTime = (Date.now() - room.startTime) / 1000;
+	}
+
 	return {
 		room: {
 			roomId: roomId,
 			currentTrack: room.currentTrack,
 			isPlaying: room.isPlaying,
-			currentTime: room.currentTime,
-			listeners: room.listeners.length,
+			currentTime: currentTime,
+			startTime: room.startTime,
+			listeners: _.uniqBy(room.listeners, 'uid').length,
 			isHost: room.hostId === socket.uid,
 			playlist: room.playlist
 		}
@@ -263,7 +302,7 @@ Music.getRooms = async function () {
 			roomId: roomId,
 			currentTrack: room.currentTrack,
 			isPlaying: room.isPlaying,
-			listeners: room.listeners.length,
+			listeners: _.uniqBy(room.listeners, 'uid').length,
 			createdAt: room.createdAt
 		});
 	}
@@ -282,28 +321,171 @@ Music.addToPlaylist = async function (socket, data) {
 		throw new Error('Room not found');
 	}
 
-	// 只有房主可以添加歌曲
-	if (room.hostId !== socket.uid) {
-		throw new Error('Only host can add tracks to playlist');
+	// 检查歌曲是否正在播放或已在播放列表中
+	const isCurrent = room.currentTrack && room.currentTrack.id === track.id;
+	const inPlaylist = room.playlist.find(t => t.id === track.id);
+	
+	if (isCurrent || inPlaylist) {
+		return { success: true, alreadyExists: true };
 	}
+
+	// 获取点歌人信息
+	const user = require('../user');
+	const userData = await user.getUserFields(socket.uid, ['username']);
+	track.addedBy = userData.username;
 
 	// 添加歌曲到播放列表
 	room.playlist.push(track);
 
-	// 通知所有用户播放列表已更新
+	// 如果房间当前没有播放歌曲，则自动播放这第一首歌
+	if (!room.currentTrack) {
+		await Music.doPlay(roomId, track);
+	} else {
+		// 否则，只需要通知播放列表已更新
+		const io = require('./index').server;
+		io.to(`music_room_${roomId}`).emit('event:music.playlist.update', {
+			playlist: room.playlist
+		});
+	}
+
+	return { success: true };
+};
+
+// 投票切歌
+Music.voteSkip = async function (socket, data) {
+	const { roomId } = data;
+	if (!roomId) {
+		throw new Error('Invalid room ID');
+	}
+
+	const room = musicRooms.get(roomId);
+	if (!room) {
+		throw new Error('Room not found');
+	}
+
+	if (!room.currentTrack) {
+		throw new Error('No track playing');
+	}
+
+	// 检查是否已经投过票
+	if (room.votes.has(socket.uid)) {
+		throw new Error('You have already voted');
+	}
+
+	// 记录投票
+	room.votes.add(socket.uid);
+
+	const uniqueListenersCount = _.uniqBy(room.listeners, 'uid').length;
+	const currentVotesCount = room.votes.size;
+	const requiredVotes = Math.ceil(uniqueListenersCount / 2);
+
 	const io = require('./index').server;
-	io.to(`music_room_${roomId}`).emit('event:music.playlist.update', {
-		playlist: room.playlist
+
+	// 获取投票者信息并发送聊天消息
+	const user = require('../user');
+	const userData = await user.getUserFields(socket.uid, ['username']);
+	
+	io.to(`music_room_${roomId}`).emit('event:music.chat', {
+		message: {
+			username: '系统',
+			content: `${userData.username} 参与了投票切歌 (${currentVotesCount}/${requiredVotes})`,
+			timestamp: Date.now(),
+			system: true
+		}
 	});
+
+	// 广播投票更新
+	io.to(`music_room_${roomId}`).emit('event:music.vote.update', {
+		votes: Array.from(room.votes),
+		requiredVotes: requiredVotes,
+		currentVotes: currentVotesCount,
+		totalListeners: uniqueListenersCount
+	});
+
+	// 检查是否达到切歌条件
+	if (currentVotesCount >= requiredVotes) {
+		// 自动切换到下一首
+		const currentIndex = room.playlist.findIndex(t => t.id === room.currentTrack.id);
+		
+		// 无论是否有下一首，都先移除当前歌曲
+		if (currentIndex !== -1) {
+			room.playlist.splice(currentIndex, 1);
+		}
+
+		if (room.playlist.length > 0) {
+			const nextTrack = room.playlist[0]; // 移除后，下一首变成第一首
+			
+			// 发送切歌聊天通知
+			io.to(`music_room_${roomId}`).emit('event:music.chat', {
+				message: {
+					username: '系统',
+					content: `投票通过！自动切换下一首：${nextTrack.name}`,
+					timestamp: Date.now(),
+					system: true
+				}
+			});
+
+			// 执行播放逻辑
+			await Music.doPlay(roomId, nextTrack);
+
+			// 发送完整的房间更新
+			io.to(`music_room_${roomId}`).emit('event:music.room.update', {
+				room: {
+					roomId: roomId,
+					currentTrack: room.currentTrack,
+					isPlaying: room.isPlaying,
+					currentTime: room.currentTime,
+					startTime: room.startTime,
+					listeners: uniqueListenersCount,
+					playlist: room.playlist,
+					votes: []
+				}
+			});
+		} else {
+			// 如果没有下一首，则停止播放或清空
+			room.currentTrack = null;
+			room.isPlaying = false;
+			room.currentTime = 0;
+			room.startTime = 0;
+			room.votes = new Set();
+
+			io.to(`music_room_${roomId}`).emit('event:music.chat', {
+				message: {
+					username: '系统',
+					content: `投票通过！已切歌（播放列表已空）`,
+					timestamp: Date.now(),
+					system: true
+				}
+			});
+
+			// 通知所有用户播放列表已更新
+			io.to(`music_room_${roomId}`).emit('event:music.playlist.update', {
+				playlist: room.playlist
+			});
+
+			io.to(`music_room_${roomId}`).emit('event:music.room.update', {
+				room: {
+					roomId: roomId,
+					currentTrack: null,
+					isPlaying: false,
+					currentTime: 0,
+					startTime: 0,
+					listeners: uniqueListenersCount,
+					playlist: room.playlist,
+					votes: []
+				}
+			});
+		}
+	}
 
 	return { success: true };
 };
 
 // 从播放列表移除歌曲
 Music.removeFromPlaylist = async function (socket, data) {
-	const { roomId, index } = data;
-	if (!roomId || !index) {
-		throw new Error('Invalid room ID or index');
+	const { roomId, index, trackId } = data;
+	if (!roomId) {
+		throw new Error('Invalid room ID');
 	}
 
 	const room = musicRooms.get(roomId);
@@ -317,23 +499,67 @@ Music.removeFromPlaylist = async function (socket, data) {
 	}
 
 	// 移除歌曲
-	if (index >= 0 && index < room.playlist.length) {
+	let removed = false;
+	if (trackId) {
+		const newPlaylist = room.playlist.filter(t => t.id !== trackId);
+		if (newPlaylist.length !== room.playlist.length) {
+			room.playlist = newPlaylist;
+			removed = true;
+		}
+	} else if (typeof index === 'number' && index >= 0 && index < room.playlist.length) {
 		room.playlist.splice(index, 1);
+		removed = true;
+	}
 
-		// 如果当前播放的歌曲被移除，调整currentTrackIndex
-		if (room.currentTrack && room.playlist.length > 0) {
-			const newIndex = room.playlist.findIndex(t => t.id === room.currentTrack.id);
-			if (newIndex === -1) {
+	if (removed) {
+		// 如果当前播放的歌曲被移除，调整currentTrack
+		if (room.currentTrack) {
+			const stillExists = room.playlist.find(t => t.id === room.currentTrack.id);
+			if (!stillExists) {
 				room.currentTrack = null;
 				room.isPlaying = false;
 				room.currentTime = 0;
+				room.startTime = 0;
+				room.votes = new Set(); // 重置投票
 			}
+		}
+
+		// 如果当前播放变更了，或者手动删除了正在播放的歌曲，我们需要尝试自动播放下一首
+		// 这样用户在切歌后，列表中的第一首会自动开始播放
+		if (!room.currentTrack && room.playlist.length > 0) {
+			const nextTrack = room.playlist[0];
+			room.currentTrack = nextTrack;
+			room.isPlaying = true;
+			room.currentTime = 0;
+			room.startTime = Date.now();
+			room.votes = new Set();
+			
+			const io = require('./index').server;
+			io.to(`music_room_${roomId}`).emit('event:music.play', {
+				track: nextTrack,
+				currentTime: 0,
+				startTime: room.startTime
+			});
 		}
 
 		// 通知所有用户播放列表已更新
 		const io = require('./index').server;
 		io.to(`music_room_${roomId}`).emit('event:music.playlist.update', {
 			playlist: room.playlist
+		});
+
+		// 如果当前播放变更了，通知房间更新
+		io.to(`music_room_${roomId}`).emit('event:music.room.update', {
+			room: {
+				roomId: roomId,
+				currentTrack: room.currentTrack,
+				isPlaying: room.isPlaying,
+				currentTime: room.currentTime,
+				startTime: room.startTime,
+				listeners: _.uniqBy(room.listeners, 'uid').length,
+				playlist: room.playlist,
+				votes: Array.from(room.votes)
+			}
 		});
 	}
 
