@@ -330,7 +330,7 @@
 				max-width: 320px;
 				max-height: 500px;
 				overflow: hidden;
-				z-index: 1000;
+				z-index: 9999;
 				box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 				border: 1px solid rgba(255, 255, 255, 0.3);
 				animation: slideInLeft 0.3s ease;
@@ -500,31 +500,6 @@
 				background: rgba(102, 126, 234, 0.4);
 			}
 
-			/* 搜索类型按钮样式 */
-			.search-type-btn {
-				transition: all 0.3s ease;
-				position: relative;
-				overflow: hidden;
-				font-weight: 500;
-			}
-
-			.search-type-btn:hover {
-				transform: translateY(-2px);
-				box-shadow: 0 4px 12px rgba(0, 123, 255, 0.2);
-			}
-
-			.search-type-btn.active {
-				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-				border-color: transparent !important;
-				color: white !important;
-				box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-			}
-
-			.search-type-btn.active .source-badge {
-				background: rgba(255, 255, 255, 0.2);
-				color: white;
-			}
-
 			.source-badge {
 				font-size: 11px;
 				padding: 2px 6px;
@@ -537,7 +512,6 @@
 
 			/* 搜索输入框样式 */
 			#music-search-input {
-				border-radius: 25px 0 0 25px;
 				border: none;
 				box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 			}
@@ -601,61 +575,250 @@
 			.card.music-search-card {
 				position: relative;
 			}
+
+			/* 搜索区域样式 */
+			.search-container {
+				display: flex;
+				gap: 0;
+				align-items: stretch;
+			}
+
+			.search-type-btn {
+				border: 1px solid #0d6efd;
+				background: white;
+				color: #0d6efd;
+				font-weight: 500;
+				height: 42px;
+				min-width: 180px;
+				padding: 0 16px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 8px;
+				transition: all 0.2s ease;
+				border-radius: 21px 0 0 21px;
+				cursor: pointer;
+				position: relative;
+			}
+
+			.search-type-btn:hover {
+				background: #0d6efd;
+				color: white;
+			}
+
+			.search-type-btn.show {
+				background: #0d6efd;
+				color: white;
+			}
+
+			.search-input-field {
+				flex: 1;
+				border: 1px solid #0d6efd;
+				border-left: none;
+				border-right: none;
+				height: 42px;
+				padding: 0 16px;
+				font-size: 15px;
+				outline: none;
+				transition: all 0.2s ease;
+			}
+
+			.search-input-field:focus {
+				box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+			}
+
+			.search-submit-btn {
+				border: 1px solid #0d6efd;
+				background: #0d6efd;
+				color: white;
+				font-weight: 500;
+				height: 42px;
+				padding: 0 24px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 6px;
+				transition: all 0.2s ease;
+				border-radius: 0 21px 21px 0;
+				cursor: pointer;
+			}
+
+			.search-submit-btn:hover {
+				background: #0b5ed7;
+				border-color: #0b5ed7;
+			}
+
+			.search-dropdown-menu {
+				position: absolute;
+				top: 100%;
+				left: 0;
+				margin-top: 8px;
+				border-radius: 8px;
+				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+				border: 1px solid rgba(0, 0, 0, 0.1);
+				min-width: 200px;
+				z-index: 10002;
+				background: white;
+				padding: 4px;
+				opacity: 0;
+				visibility: hidden;
+				transform: translateY(-4px);
+				transition: all 0.2s ease;
+			}
+
+			.search-dropdown-menu.show {
+				opacity: 1;
+				visibility: visible;
+				transform: translateY(0);
+			}
+
+			.search-dropdown-header {
+				padding: 8px 12px;
+				font-size: 11px;
+				font-weight: 600;
+				color: #6c757d;
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
+			}
+
+			.search-dropdown-item {
+				padding: 10px 12px;
+				cursor: pointer;
+				border-radius: 4px;
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				transition: background-color 0.15s ease, color 0.15s ease;
+				color: #212529 !important;
+				font-size: 14px;
+				background: transparent !important;
+			}
+
+			.search-dropdown-item:hover {
+				background-color: #0d6efd !important;
+				color: white !important;
+			}
+
+			.search-dropdown-item:hover .search-dropdown-icon {
+				color: white !important;
+			}
+
+			.search-dropdown-item.active {
+				background-color: #0d6efd !important;
+				color: white !important;
+				font-weight: 500;
+			}
+
+			.search-dropdown-item.active .search-dropdown-icon {
+				color: white !important;
+			}
+
+			.search-dropdown-icon {
+				font-size: 14px;
+				transition: color 0.15s ease;
+				color: #dc3545;
+			}
+
+			/* 删除旧的dropdown-item样式，不再使用 */
+
+			/* 搜索历史样式 */
+			.search-history-item {
+				border: none !important;
+				background: white !important;
+				padding: 12px 16px !important;
+				transition: all 0.2s ease;
+			}
+
+			.search-history-item:hover {
+				background: #f8f9fa !important;
+				transform: translateX(2px);
+			}
+
+			.search-history-item:hover .history-clear-btn {
+				background: #dc3545;
+				color: white;
+			}
+
+			.search-history-item .history-clear-btn:hover {
+				background: #c82333 !important;
+			}
+
+			.search-history-card {
+				max-height: 300px;
+				overflow: hidden;
+			}
+
+			.search-history-card .list-group {
+				max-height: 300px;
+				overflow-y: auto;
+			}
+
 		</style>
 
 		<div class="music-room-container h-100">
 			<div class="d-flex flex-column gap-4">
 				<!-- 搜索区域 -->
 				<div class="card music-search-card border-0 shadow-sm rounded-4 overflow-visible">
-					<div class="card-body p-4 position-relative">
-						<div class="row g-3">
-							<!-- 搜索类型选择 -->
-							<div class="col-12 col-md-auto">
-								<div class="d-flex gap-2 flex-wrap">
-									<button class="search-type-btn btn btn-primary rounded-pill px-4 py-2 active" data-type="song" data-source="qq">
-										<i class="fa fa-music me-2"></i>歌曲
-										<span class="source-badge ms-1">QQ音乐</span>
-									</button>
-									<button class="search-type-btn btn btn-outline-primary rounded-pill px-4 py-2" data-type="song" data-source="netease">
-										<i class="fa fa-music me-2"></i>歌曲
-										<span class="source-badge ms-1">网易云</span>
-									</button>
-									<button class="search-type-btn btn btn-outline-primary rounded-pill px-4 py-2" data-type="user">
-										<i class="fa fa-user me-2"></i>用户
-									</button>
-									<button class="search-type-btn btn btn-outline-primary rounded-pill px-4 py-2" data-type="playlist">
-										<i class="fa fa-list me-2"></i>歌单
+					<div class="card-body p-4">
+						<div class="row justify-content-center">
+							<div class="col-12 col-md-10 col-lg-8">
+								<div class="search-container position-relative">
+									<!-- 搜索类型按钮 -->
+									<div class="dropdown">
+										<button class="search-type-btn" id="search-type-btn">
+											<i class="fa fa-music"></i>
+											<span id="current-search-type">QQ音乐 歌曲</span>
+										</button>
+										<div class="search-dropdown-menu" aria-labelledby="search-type-btn">
+											<div class="search-dropdown-header">QQ音乐</div>
+											<div class="search-dropdown-item active" data-type="song" data-source="qq">
+												<i class="fa fa-music search-dropdown-icon"></i>歌曲
+											</div>
+											<div class="search-dropdown-item" data-type="user" data-source="qq">
+												<i class="fa fa-music search-dropdown-icon"></i>用户
+											</div>
+											<div class="search-dropdown-item" data-type="playlist" data-source="qq">
+												<i class="fa fa-music search-dropdown-icon"></i>歌单
+											</div>
+											<div class="search-dropdown-header">网易云音乐</div>
+											<div class="search-dropdown-item" data-type="song" data-source="netease">
+												<i class="fa fa-compact-disc search-dropdown-icon"></i>歌曲
+											</div>
+											<div class="search-dropdown-item" data-type="user" data-source="netease">
+												<i class="fa fa-compact-disc search-dropdown-icon"></i>用户
+											</div>
+											<div class="search-dropdown-item" data-type="playlist" data-source="netease">
+												<i class="fa fa-compact-disc search-dropdown-icon"></i>歌单
+											</div>
+										</div>
+									</div>
+									<!-- 搜索输入框 -->
+									<input type="text" id="music-search-input" class="search-input-field" placeholder="搜索QQ音乐歌曲...">
+									<!-- 搜索按钮 -->
+									<button id="search-track-btn" class="search-submit-btn">
+										<i class="fa fa-search"></i>
+										搜索
 									</button>
 								</div>
-							</div>
-							<!-- 搜索输入框 -->
-							<div class="col-12 col-md">
-								<div class="input-group">
-									<span class="input-group-text bg-light border-0">
-										<i class="fa fa-search text-muted"></i>
-									</span>
-									<input type="text" id="music-search-input" class="form-control" placeholder="搜索歌曲、用户或歌单...">
-									<button id="search-track-btn" class="btn btn-primary px-4">
-										<i class="fa fa-search me-1"></i>搜索
-									</button>
-								</div>
-							</div>
-						</div>
-						<!-- 搜索结果 - 使用绝对定位，覆盖在其他内容之上 -->
-						<div id="search-results-container" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; margin-top: 8px; visibility: hidden; opacity: 0; transition: all 0.3s ease;">
-							<div class="card border-0 shadow-sm">
-								<div class="card-body p-0">
-									<div id="search-results" class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;"></div>
-								</div>
-								<!-- 分页 -->
-								<div id="search-pagination" class="card-footer border-0 bg-light py-2 px-3 d-flex justify-content-between align-items-center" style="display: none;">
-									<button id="prev-page-btn" class="btn btn-sm btn-outline-primary" disabled>
-										<i class="fa fa-chevron-left"></i>
-									</button>
-									<span class="text-muted small">第 <span id="current-page">1</span> 页</span>
-									<button id="next-page-btn" class="btn btn-sm btn-outline-primary" disabled>
-										<i class="fa fa-chevron-right"></i>
-									</button>
+								<!-- 搜索历史记录 -->
+								<div id="search-history-container" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 10001; margin-top: 8px; display: none;"></div>
+								<!-- 搜索结果 - 使用绝对定位，覆盖在其他内容之上 -->
+								<div id="search-results-container" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 10000; margin-top: 8px; visibility: hidden; opacity: 0; transition: all 0.3s ease;">
+									<div class="card border-0 shadow-sm">
+										<div class="card-body p-0">
+											<div id="search-results" class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;"></div>
+										</div>
+										<!-- 分页 -->
+										<div id="search-pagination" class="card-footer border-0 bg-light py-2 px-3 d-flex justify-content-between align-items-center" style="display: none;">
+											<button id="prev-page-btn" class="btn btn-sm btn-outline-primary" disabled>
+												<i class="fa fa-chevron-left"></i>
+											</button>
+											<span class="text-muted small">第 <span id="current-page">1</span> 页</span>
+											<button id="next-page-btn" class="btn btn-sm btn-outline-primary" disabled>
+												<i class="fa fa-chevron-right"></i>
+											</button>
+										</div>
+									</div>
 								</div>
 							</div>
 						</div>
@@ -713,20 +876,6 @@
 										<p class="lead">同步歌词，让听歌更有氛围</p>
 									</div>
 								</div>
-							</div>
-						</div>
-					</div>
-				</div>
-
-				<!-- 用户列表 hover 弹出框（移到外部以避免被裁剪） -->
-				<div id="room-users-popover" class="room-users-popover shadow-lg rounded-3" style="display: none;">
-					<div class="room-users-popover-header">
-						<span><i class="fa fa-users me-2"></i>房间用户</span>
-					</div>
-					<div class="room-users-popover-body">
-						<div id="room-users-list" class="room-users-list">
-							<div class="text-center text-muted py-3">
-								<i class="fa fa-spinner fa-spin me-2"></i>加载中...
 							</div>
 						</div>
 					</div>

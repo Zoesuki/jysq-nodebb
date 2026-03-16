@@ -40,6 +40,7 @@ define('music/rooms', [
 					title: '错误',
 					message: '请输入房间名称',
 					type: 'error',
+					timeout: 3000,
 				});
 				return;
 			}
@@ -107,7 +108,8 @@ define('music/rooms', [
 
 		let html = '';
 		rooms.forEach(function (room) {
-			const cover = room.currentTrack && room.currentTrack.cover ? room.currentTrack.cover : 'https://y.gtimg.cn/music/photo_new/T002R300x300M000002eS9mS2YvTf8.jpg';
+			const hasTrack = room.currentTrack && room.currentTrack.cover;
+			const cover = hasTrack ? room.currentTrack.cover : 'https://y.gtimg.cn/music/photo_new/T002R300x300M000002eS9mS2YvTf8.jpg';
 			const trackName = room.currentTrack ? room.currentTrack.name : '暂无播放';
 			const artistName = room.currentTrack ? (room.currentTrack.artist || '-') : '-';
 
@@ -115,7 +117,7 @@ define('music/rooms', [
 				<div class="col-md-6 col-lg-4">
 					<div class="card h-100 room-item border-0 shadow-sm rounded-4 overflow-hidden position-relative">
 						<div class="room-cover-wrapper position-relative" style="height: 160px;">
-							<img src="${cover}" class="card-img-top w-100 h-100 object-fit-cover blur-bg" alt="room cover">
+							<img src="${cover}" class="card-img-top w-100 h-100 object-fit-cover blur-bg" alt="room cover" onerror="this.onerror=null; this.src='https://y.gtimg.cn/music/photo_new/T002R300x300M000002eS9mS2YvTf8.jpg';">
 							<div class="position-absolute top-0 start-0 w-100 h-100 bg-dark opacity-50"></div>
 							<div class="position-absolute top-50 start-50 translate-middle text-white text-center w-100 px-3">
 								<h5 class="card-title mb-1 text-truncate fw-bold">${room.roomId.replace('room-', '房间 #')}</h5>
@@ -128,7 +130,7 @@ define('music/rooms', [
 						<div class="card-body p-3">
 							<div class="d-flex align-items-center mb-3">
 								<div class="flex-shrink-0 me-3">
-									<img src="${cover}" class="rounded-3 shadow-sm" style="width: 48px; height: 48px; object-fit: cover;" alt="track cover">
+									<img src="${cover}" class="rounded-3 shadow-sm" style="width: 48px; height: 48px; object-fit: cover;" alt="track cover" onerror="this.onerror=null; this.src='https://y.gtimg.cn/music/photo_new/T002R300x300M000002eS9mS2YvTf8.jpg';">
 								</div>
 								<div class="flex-grow-1 overflow-hidden">
 									<p class="mb-0 text-truncate fw-bold text-sm">${trackName}</p>

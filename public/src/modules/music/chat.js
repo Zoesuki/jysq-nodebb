@@ -1,5 +1,5 @@
 // 聊天模块
-define('music/chat', [], function () {
+define('music/chat', ['music/state'], function (State) {
 	const Chat = {};
 
 	// 发送聊天消息
@@ -8,12 +8,19 @@ define('music/chat', [], function () {
 		const message = input.val().trim();
 		if (!message) return;
 
-		Chat.addChatMessage({
-			username: app.user.username,
-			uid: app.user.uid,
-			content: message,
-			timestamp: Date.now(),
-		}, true);
+		// 获取当前房间ID
+		if (!State.currentRoomId) {
+			console.error('[Music] No room ID available');
+			return;
+		}
+
+		// 通过socket发送消息到服务器
+		socket.emit('modules.music.sendChat', {
+			roomId: State.currentRoomId,
+			content: message
+		}).catch(err => {
+			console.error('[Music] Failed to send chat message:', err);
+		});
 
 		input.val('');
 	};
@@ -39,6 +46,9 @@ define('music/chat', [], function () {
 			return;
 		}
 
+		// 使用消息中的头像，如果没有则使用默认头像
+		const avatarUrl = message.picture || '/assets/uploads/system/avatar-default.jpeg';
+
 		const time = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 		const html = `
 			<div class="chat-message ${isOwn ? 'own' : ''}">
@@ -48,7 +58,7 @@ define('music/chat', [], function () {
 				</div>
 				<div class="d-flex align-items-start ${isOwn ? 'flex-row-reverse' : ''}">
 					<div class="flex-shrink-0">
-						<img src="${message.picture || '/assets/images/default-avatar.png'}" class="rounded-circle shadow-sm" style="width: 32px; height: 32px; object-fit: cover;">
+						<img src="${avatarUrl}" class="rounded-circle shadow-sm" style="width: 32px; height: 32px; object-fit: cover;" onerror="this.src='/assets/uploads/system/avatar-default.jpeg'">
 					</div>
 					<div class="message-content mx-2">
 						${message.content}

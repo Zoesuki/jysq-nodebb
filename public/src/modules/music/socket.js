@@ -20,16 +20,19 @@ define('music/socket', [
 		if (data.track) {
 			console.log('[Music] Play event received:', data.track.name, '- Current playlist length:', State.playlist.length);
 			State.currentTrack = data.track;
-			UI.hidePlayOverlay();
 
 			// 不传递播放列表，等待 playlist.update 事件
-			UI.updateRoomUI({
-				currentTrack: data.track,
-				isPlaying: true,
-				currentTime: data.currentTime || 0,
-				startTime: data.startTime || 0,
-				listeners: $('#listener-count').text() || 0,
-			});
+			// 注意：不要在这里调用 UI.hidePlayOverlay()，让 UI.updateRoomUI 统一处理
+			// 使用 setTimeout 确保 DOM 已完全渲染
+			setTimeout(function() {
+				UI.updateRoomUI({
+					currentTrack: data.track,
+					isPlaying: true,
+					currentTime: data.currentTime || 0,
+					startTime: data.startTime || 0,
+					listeners: $('#listener-count').text() || 0,
+				});
+			}, 0);
 		}
 	};
 
@@ -42,13 +45,18 @@ define('music/socket', [
 	Socket.onRoomUpdate = function (data) {
 		if (data.room) {
 			State.currentTrack = data.room.currentTrack;
-			UI.updateRoomUI(data.room);
+			// 使用 setTimeout 确保 DOM 已完全渲染
+			setTimeout(function() {
+				UI.updateRoomUI(data.room);
+			}, 0);
 		}
 	};
 
 	// 处理聊天事件
 	Socket.onMusicChat = function (data) {
-		Chat.addChatMessage(data.message, data.isOwn);
+		// 判断是否是自己的消息
+		const isOwn = data.message && data.message.uid && data.message.uid === parseInt(app.user.uid, 10);
+		Chat.addChatMessage(data.message, isOwn);
 	};
 
 	// 处理播放列表更新事件
@@ -57,14 +65,29 @@ define('music/socket', [
 			console.log('[Music] Playlist update received:', data.playlist.length, 'tracks');
 			State.playlist = data.playlist;
 			State.lastPlaylistJson = JSON.stringify(State.playlist);
-			UI.updatePlaylistUI();
+			// 使用 setTimeout 确保 UI 已完全初始化
+			setTimeout(function() {
+				UI.updatePlaylistUI();
+			}, 0);
 		}
 	};
 
 	// 处理投票更新事件
 	Socket.onVoteUpdate = function (data) {
-		if (data.votes.includes(parseInt(app.user.uid, 10))) {
-			$('#vote-skip-btn').prop('disabled', true).addClass('btn-secondary').removeClass('btn-outline-primary').html('<i class="fa fa-check me-1"></i> 已投票');
+		const userUid = parseInt(app.user.uid, 10);
+
+		if (data.votes && data.votes.includes(userUid)) {
+			// 用户已经投过票
+			$('#vote-skip-btn').prop('disabled', true)
+				.addClass('btn-secondary')
+				.removeClass('btn-outline-primary')
+				.html(`<i class="fa fa-check me-1"></i> 已投票 (${data.currentVotes || 0}/${data.requiredVotes || 0})`);
+		} else {
+			// 用户还没有投票或投票已重置，恢复按钮状态
+			$('#vote-skip-btn').prop('disabled', false)
+				.addClass('btn-outline-primary')
+				.removeClass('btn-secondary')
+				.html(`<i class="fa fa-forward me-1"></i> 投票切歌 (${data.currentVotes || 0}/${data.requiredVotes || 0})`);
 		}
 	};
 

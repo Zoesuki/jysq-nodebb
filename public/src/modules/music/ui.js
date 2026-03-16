@@ -20,6 +20,11 @@ define('music/ui', [
 
 	// 更新房间UI
 	UI.updateRoomUI = function (room) {
+		if (!$('#listener-count').length) {
+			console.warn('[UI] Elements not ready, skipping update');
+			return;
+		}
+
 		$('#listener-count').text(room.listeners);
 
 		// 更新投票显示
@@ -32,30 +37,30 @@ define('music/ui', [
 		}
 
 		// 同步播放列表
+		let playlistChanged = false;
 		if (room.playlist && Array.isArray(room.playlist)) {
 			const currentPlaylistJson = JSON.stringify(room.playlist);
-			let playlistChanged = false;
 
 			if (State.lastPlaylistJson !== currentPlaylistJson) {
 				State.lastPlaylistJson = currentPlaylistJson;
 				State.playlist = room.playlist;
 				playlistChanged = true;
 			}
+		}
 
-			// 更新当前播放
-			if (room.currentTrack) {
-				if (!State.currentTrack || room.currentTrack.id !== State.currentTrack.id) {
-					State.currentTrack = room.currentTrack;
-					playlistChanged = true;
-				}
-			} else if (State.currentTrack) {
-				State.currentTrack = null;
+		// 更新当前播放
+		if (room.currentTrack) {
+			if (!State.currentTrack || room.currentTrack.id !== State.currentTrack.id) {
+				State.currentTrack = room.currentTrack;
 				playlistChanged = true;
 			}
+		} else if (State.currentTrack) {
+			State.currentTrack = null;
+			playlistChanged = true;
+		}
 
-			if (playlistChanged) {
-				UI.updatePlaylistUI();
-			}
+		if (playlistChanged) {
+			UI.updatePlaylistUI();
 		}
 
 		if (room.currentTrack) {
@@ -100,6 +105,9 @@ define('music/ui', [
 				if (State.audioPlayer.src !== room.currentTrack.url) {
 					State.audioPlayer.src = room.currentTrack.url;
 
+					// 参考 Jusic-ui：设置自动预加载，提升加载速度
+					State.audioPlayer.preload = 'auto';
+
 					State.audioPlayer.onloadeddata = function() {
 						if (targetTime > 0) {
 							State.audioPlayer.currentTime = targetTime;
@@ -129,10 +137,43 @@ define('music/ui', [
 								}
 							});
 						}
-						if (Math.abs(State.audioPlayer.currentTime - targetTime) > 2) {
+
+						// 参考 Jusic-ui 的同步策略：使用时间差计算
+						const currentTime = State.audioPlayer.currentTime;
+						const timeDiff = currentTime - targetTime;
+
+						// 差异超过2秒：强制同步
+						if (Math.abs(timeDiff) > 2) {
+							console.log(`[Music] Large sync: ${timeDiff.toFixed(2)}s → ${targetTime.toFixed(2)}s`);
 							State.audioPlayer.currentTime = targetTime;
 						}
+						// 差异在0.5-2秒之间：使用动态速率平滑调整
+						else if (Math.abs(timeDiff) > 0.5) {
+							let rateAdjustment = 1.0;
+							if (timeDiff > 0) {
+								// 本地超前，减速追赶（0.9-0.95x）
+								rateAdjustment = Math.max(0.9, 1.0 - Math.min(Math.abs(timeDiff) * 0.05, 0.1));
+							} else {
+								// 本地滞后，加速追赶（1.05-1.1x）
+								rateAdjustment = Math.min(1.1, 1.0 + Math.min(Math.abs(timeDiff) * 0.05, 0.1));
+							}
+							console.log(`[Music] Smooth adjust: ${rateAdjustment.toFixed(2)}x (diff: ${timeDiff.toFixed(2)}s)`);
+
+							State.audioPlayer.playbackRate = rateAdjustment;
+
+							// 根据差异大小动态计算调整时长
+							const adjustmentDuration = Math.min(Math.abs(timeDiff) * 500, 2000);
+							setTimeout(function() {
+								State.audioPlayer.playbackRate = 1.0;
+							}, adjustmentDuration);
+						}
+						// 差异小于0.5秒：不做调整，保持流畅性
 					} else {
+						// 如果服务器说暂停了，本地也暂停
+						if (!State.audioPlayer.paused) {
+							console.log('[Music] Server says pause, stopping audio player');
+							State.audioPlayer.pause();
+						}
 						State.audioPlayer.currentTime = targetTime;
 					}
 				}
@@ -159,17 +200,27 @@ define('music/ui', [
 			// 重置上次状态
 			State.lastCoverUrl = null;
 			State.lastTrackId = null;
+
+			// 更新播放列表UI,显示"播放列表为空"的状态
+			UI.updatePlaylistUI();
 		}
 
 		$('#prev-btn').prop('disabled', true);
 		$('#next-btn').prop('disabled', true);
 
-		// 如果没有当前播放歌曲，重置播放器状态
-		if (!room.currentTrack && State.audioPlayer && !State.audioPlayer.paused) {
-			console.log('[Music] No current track, stopping audio player');
+		// 如果服务器说暂停了，但本地还在播放，则暂停
+		if (!room.isPlaying && State.audioPlayer && !State.audioPlayer.paused) {
+			console.log('[Music] Server says pause, stopping audio player');
 			State.audioPlayer.pause();
-			State.audioPlayer.currentTime = 0;
-			UI.showPlayOverlay();
+		}
+
+		// 如果没有当前播放歌曲，重置播放器状态
+		// 注意：不在这里显示覆盖层，覆盖层只在首次加载或自动播放被阻止时显示
+		if (!room.currentTrack) {
+			if (State.audioPlayer) {
+				State.audioPlayer.pause();
+				State.audioPlayer.currentTime = 0;
+			}
 		}
 	};
 
@@ -211,11 +262,14 @@ define('music/ui', [
 					<div class="flex-shrink-0 me-3">
 						${State.currentTrack.cover ? `<img src="${State.currentTrack.cover}" class="rounded-3 shadow-sm" style="width: 48px; height: 48px; object-fit: cover;" onerror="this.onerror=null; $(this).replaceWith('<div class=\'bg-light rounded-3 d-flex align-items-center justify-content-center\' style=\'width: 48px; height: 48px;\'><i class=\'fa fa-music text-muted\'></i></div>');">` : '<div class="bg-light rounded-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;"><i class="fa fa-music text-muted"></i></div>'}
 					</div>
-					<div class="flex-grow-1 overflow-hidden me-2">
+					<div class="flex-grow-1 overflow-hidden">
 						<div class="text-truncate fw-bold mb-0">${State.currentTrack.name}</div>
-						<div class="text-xs text-muted text-truncate d-flex justify-content-between">
-							<span class="text-success fw-medium">正在播放</span>
-							<span class="text-primary opacity-75 small"><i class="fa fa-user-plus me-1"></i>${State.currentTrack.addedBy || '系统'}</span>
+						<div class="text-xs text-muted text-truncate">${State.currentTrack.artist || '-'}</div>
+					</div>
+					<div class="flex-shrink-0">
+						<div class="d-flex align-items-center text-primary opacity-75 small">
+							<i class="fa fa-user me-1"></i>
+							<span class="fw-medium">${State.currentTrack.addedBy || '系统'}</span>
 						</div>
 					</div>
 				</div>
@@ -229,11 +283,14 @@ define('music/ui', [
 					<div class="flex-shrink-0 me-3">
 						${track.cover ? `<img src="${track.cover}" class="rounded-3 shadow-sm" style="width: 48px; height: 48px; object-fit: cover;" onerror="this.onerror=null; $(this).replaceWith('<div class=\'bg-light rounded-3 d-flex align-items-center justify-content-center\' style=\'width: 48px; height: 48px;\'><i class=\'fa fa-music text-muted\'></i></div>');">` : '<div class="bg-light rounded-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;"><i class="fa fa-music text-muted"></i></div>'}
 					</div>
-					<div class="flex-grow-1 overflow-hidden me-2">
+					<div class="flex-grow-1 overflow-hidden">
 						<div class="text-truncate fw-bold mb-0">${track.name}</div>
-						<div class="text-xs text-muted text-truncate d-flex justify-content-between">
-							<span>${track.artist || '-'}</span>
-							<span class="text-primary opacity-75 small"><i class="fa fa-user-plus me-1"></i>${track.addedBy || '系统'}</span>
+						<div class="text-xs text-muted text-truncate">${track.artist || '-'}</div>
+					</div>
+					<div class="flex-shrink-0">
+						<div class="d-flex align-items-center text-primary opacity-75 small">
+							<i class="fa fa-user me-1"></i>
+							<span class="fw-medium">${track.addedBy || '系统'}</span>
 						</div>
 					</div>
 				</div>
@@ -245,11 +302,9 @@ define('music/ui', [
 
 	// 显示搜索结果
 	UI.showSearchResults = function (songs) {
-		console.log('[UI] showSearchResults called with songs:', songs);
-		console.log('[UI] songs length:', songs?.length);
 
 		const container = $('#search-results');
-		console.log('[UI] search-results container found:', container.length);
+		const defaultCover = 'https://y.gtimg.cn/music/photo_new/T002R300x300M000002eS9mS2YvTf8.jpg';
 
 		let html = '';
 		for (const song of songs) {
@@ -259,12 +314,12 @@ define('music/ui', [
 			const songmid = song.songmid;
 			const albummid = song.albummid || '';
 			const duration = song.interval ? State.formatTime(song.interval) : '';
-			const coverUrl = `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albummid}.jpg`;
+			const coverUrl = albummid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albummid}.jpg` : defaultCover;
 
 			html += `
 				<div class="list-group-item d-flex justify-content-between align-items-center" data-songmid="${songmid}" data-albummid="${albummid}" data-songname="${songName}" data-singer="${singer}" data-cover="${coverUrl}">
 					<div class="d-flex align-items-center" style="flex: 1; min-width: 0;">
-						<img src="${coverUrl}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 12px; flex-shrink: 0;" alt="${songName}">
+						<img src="${coverUrl}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 12px; flex-shrink: 0;" alt="${songName}" onerror="this.onerror=null; this.src='${defaultCover}';">
 						<div style="flex: 1; min-width: 0; overflow: hidden;">
 							<div class="fw-bold text-truncate">${songName}</div>
 							<small class="text-muted text-truncate">${singer} ${album ? '- ' + album : ''}</small>
@@ -280,12 +335,12 @@ define('music/ui', [
 			`;
 		}
 
-		console.log('[UI] Setting HTML to search-results container');
 		container.html(html);
 
+		// 隐藏搜索历史记录
+		$('#search-history-container').hide();
+
 		const $resultsContainer = $('#search-results-container');
-		console.log('[UI] Before adding visible class - inline style:', $resultsContainer.attr('style'));
-		console.log('[UI] Before adding visible class - classes:', $resultsContainer.attr('class'));
 
 		// 直接修改内联样式
 		$resultsContainer.css({
@@ -293,15 +348,20 @@ define('music/ui', [
 			'opacity': '1'
 		});
 
-		console.log('[UI] After modifying inline style:', $resultsContainer.attr('style'));
-		console.log('[UI] showSearchResults completed');
 	};
 
 	// 更新分页UI
 	UI.updatePaginationUI = function () {
-		$('#current-page').text(State.searchPageNo);
+		$('#current-page').text(`${State.searchPageNo} / ${State.searchTotalPages || 1}`);
 		$('#prev-page-btn').prop('disabled', State.searchPageNo <= 1);
 		$('#next-page-btn').prop('disabled', State.searchPageNo >= State.searchTotalPages);
+
+		// 显示/隐藏分页区域
+		if (State.searchTotalPages > 1) {
+			$('#search-pagination').show();
+		} else {
+			$('#search-pagination').hide();
+		}
 	};
 
 	// 显示全屏播放覆盖层

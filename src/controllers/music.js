@@ -88,15 +88,47 @@ MusicController.setCookie = async function (req, res, next) {
 	}
 };
 
-// 代理QQ音乐搜索
+// 代理音乐搜索
 MusicController.search = async function (req, res, next) {
 	const { key, t = '0', pageNo = 1, pageSize = 20, type = 'song', source = 'qq' } = req.body;
 
 	try {
-		console.log('[Music Controller] Search request:', { key, t, pageNo, pageSize, type, source });
+		console.log('[Music Controller] Search request:', { key, type, source, pageNo });
 
-		// 目前只支持QQ音乐歌曲搜索
-		if (type !== 'song' || source !== 'qq') {
+		// 根据来源和类型选择不同的API端点
+		let apiUrl = '';
+		let requestBody = {};
+
+		if (source === 'qq') {
+			// QQ音乐搜索
+			apiUrl = 'http://localhost:3300/search';
+			requestBody = { key, t, pageNo, pageSize };
+
+			// QQ音乐目前只支持歌曲搜索
+			if (type !== 'song') {
+				return res.json({
+					result: 100,
+					data: {
+						list: [],
+						total: 0
+					}
+				});
+			}
+		} else if (source === 'netease') {
+			// 网易云音乐搜索
+			// 这里需要对接网易云API，暂时返回空结果
+			console.log('[Music Controller] NetEase search requested, but not yet implemented');
+
+			return res.json({
+				result: 100,
+				data: {
+					list: [],
+					total: 0,
+					message: '网易云音乐搜索功能开发中'
+				}
+			});
+		} else {
+			// 不支持的来源
 			return res.json({
 				result: 100,
 				data: {
@@ -106,16 +138,16 @@ MusicController.search = async function (req, res, next) {
 			});
 		}
 
-		// 转发客户端的cookie到QQ音乐API
+		// 转发客户端的cookie到音乐API
 		const cookies = req.headers.cookie;
-		const response = await fetch(`http://localhost:3300/search`, {
+		const response = await fetch(apiUrl, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
 				'Cookie': cookies || '',
 				'Origin': 'http://localhost:4567',
 			},
-			body: JSON.stringify({ key, t, pageNo, pageSize }),
+			body: JSON.stringify(requestBody),
 		});
 
 		const data = await response.json();
@@ -123,7 +155,7 @@ MusicController.search = async function (req, res, next) {
 
 		res.json(data);
 	} catch (err) {
-		console.error('Failed to search songs:', err);
+		console.error('Failed to search:', err);
 		res.status(500).json({ result: 500, errMsg: '搜索失败' });
 	}
 };
@@ -135,6 +167,9 @@ MusicController.getSongUrl = async function (req, res, next) {
 	try {
 		// 转发客户端的cookie到QQ音乐API
 		const cookies = req.headers.cookie;
+		console.log('[Music Controller] getSongUrl received cookies:', cookies);
+		console.log('[Music Controller] getSongUrl request headers:', Object.keys(req.headers));
+
 		const response = await fetch(`http://localhost:3300/song/url?id=${id}&type=${type}`, {
 			headers: {
 				'Cookie': cookies || '',

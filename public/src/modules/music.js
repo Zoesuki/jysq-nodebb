@@ -49,9 +49,7 @@ define('music', [
 		$('#vote-skip-btn').off('click', Music.voteSkip);
 		$('#search-track-btn').off('click', Search.searchMusic);
 		$('.search-type-btn').off('click');
-		$('#music-search-input').off('keypress');
-		$('#prev-page-btn').off('click');
-		$('#next-page-btn').off('click');
+		// 搜索快捷键和分页会在 Search.initShortcuts 中绑定，这里不单独清理
 		$('#send-chat-btn').off('click', Chat.sendChatMessage);
 		$('#chat-input').off('keypress');
 		$('#play-overlay').off('click', Music.onPlayOverlayClick);
@@ -94,24 +92,12 @@ define('music', [
 		// 初始化搜索类型按钮
 		Search.initSearchTypeButtons();
 
-		$('#search-track-btn').on('click', Search.searchMusic);
-		$('#music-search-input').on('keypress', function (e) {
-			if (e.which === 13) {
-				Search.searchMusic();
-			}
-		});
+		// 初始化搜索快捷键和分页
+		Search.initShortcuts();
 
-		$('#prev-page-btn').on('click', function () {
-			if (State.searchPageNo > 1) {
-				State.searchPageNo--;
-				Search.searchMusic(true);
-			}
-		});
-		$('#next-page-btn').on('click', function () {
-			if (State.searchPageNo < State.searchTotalPages) {
-				State.searchPageNo++;
-				Search.searchMusic(true);
-			}
+		$('#search-track-btn').on('click', function(e) {
+			e.preventDefault();
+			Search.searchMusic(false);
 		});
 
 		$('#send-chat-btn').on('click', Chat.sendChatMessage);
@@ -128,16 +114,13 @@ define('music', [
 
 	Music.joinRoom = async function (roomId) {
 		try {
-			if (!State.isCookieSet) {
-				try {
-					await fetch('/api/music/cookie/3816852108', {
-						credentials: 'include',
-					});
-					console.log('[Music] QQMusic cookie set successfully');
-					State.isCookieSet = true;
-				} catch (err) {
-					console.warn('[Music] Failed to set QQMusic cookie:', err);
-				}
+			try {
+				await fetch('/api/music/cookie/1342466911', {
+					credentials: 'include',
+				});
+				console.log('[Music] QQMusic cookie set successfully');
+			} catch (err) {
+				console.warn('[Music] Failed to set QQMusic cookie:', err);
 			}
 
 			const response = await socket.emit('modules.music.joinRoom', { roomId: roomId });
@@ -163,13 +146,14 @@ define('music', [
 				title: '错误',
 				message: err.message || '加入房间失败',
 				type: 'error',
+				timeout: 3000,
 			});
 		}
 	};
 
 	Music.voteSkip = async function () {
 		if (!State.currentRoomId) return;
-		
+
 		try {
 			await socket.emit('modules.music.voteSkip', { roomId: State.currentRoomId });
 		} catch (err) {
@@ -178,6 +162,7 @@ define('music', [
 				title: '错误',
 				message: err.message || '投票失败',
 				type: 'error',
+				timeout: 3000,
 			});
 		}
 	};
@@ -188,21 +173,11 @@ define('music', [
 	};
 
 	Music.onTrackEnded = function () {
-		// 检查播放列表中是否有歌曲
-		if (State.playlist && State.playlist.length > 0) {
-			socket.emit('modules.music.playNext', { roomId: State.currentRoomId }).catch(err => {
-				console.error('Failed to play next track:', err);
-			});
-		} else {
-			// 没有下一首歌曲，清除当前歌曲并恢复默认状态
-			console.log('[Music] No next track in playlist, resetting player and lyrics');
-			UI.resetPlayerAndLyrics();
-
-			// 通知服务器暂停播放
-			socket.emit('modules.music.pause', { roomId: State.currentRoomId }).catch(err => {
-				console.error('Failed to pause:', err);
-			});
-		}
+		console.log('[Music] Track ended, checking playlist...');
+		// 直接调用playNext,它会处理播放列表为空的情况
+		socket.emit('modules.music.playNext', { roomId: State.currentRoomId }).catch(err => {
+			console.error('Failed to play next track:', err);
+		});
 	};
 
 	Music.onPlayOverlayClick = function () {
@@ -229,6 +204,7 @@ define('music', [
 						title: '播放失败',
 						message: '无法播放音频，请检查您的浏览器设置',
 						type: 'error',
+						timeout: 3000,
 					});
 				});
 			}

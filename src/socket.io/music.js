@@ -304,6 +304,8 @@ Music.doPlay = async function (roomId, track) {
 	room.startTime = Date.now();
 	room.votes = new Set(); // 播放新歌曲时重置投票
 
+	const uniqueListenersCount = _.uniqBy(room.listeners, 'uid').length;
+
 	// 从播放列表中移除该歌曲（如果存在），确保它作为"正在播放"的歌曲从"待播列表"中移除
 	const currentIndex = room.playlist.findIndex(t => t.id === track.id);
 	if (currentIndex !== -1) {
@@ -311,6 +313,15 @@ Music.doPlay = async function (roomId, track) {
 	}
 
 	const io = require('./index').server;
+
+	// 发送投票重置事件
+	io.to(`music_room_${roomId}`).emit('event:music.vote.update', {
+		votes: [],
+		requiredVotes: Math.ceil(uniqueListenersCount / 2),
+		currentVotes: 0,
+		totalListeners: uniqueListenersCount
+	});
+
 	io.to(`music_room_${roomId}`).emit('event:music.play', {
 		track: track,
 		currentTime: 0,
@@ -376,11 +387,6 @@ Music.playNext = async function (socket, data) {
 	}
 
 	return { success: true };
-};
-
-// 暂停音乐已移除，改为投票切歌模式
-Music.pause = async function () {
-	throw new Error('Pause functionality is disabled. Use voting to skip tracks.');
 };
 
 // 心跳处理
@@ -606,14 +612,16 @@ Music.voteSkip = async function (socket, data) {
 			});
 
 			// 执行播放逻辑（doPlay 会自动从播放列表中移除正在播放的歌曲）
+			// doPlay 会发送 event:music.play 和 event:music.playlist.update 事件
 			await Music.doPlay(roomId, nextTrack);
-
-			// 发送完整的房间更新
+		} else {
+			// 如果没有下一首，则停止播放
+			// 先发送停止当前歌曲的事件，让客户端暂停
 			io.to(`music_room_${roomId}`).emit('event:music.room.update', {
 				room: {
 					roomId: roomId,
 					currentTrack: room.currentTrack,
-					isPlaying: room.isPlaying,
+					isPlaying: false,
 					currentTime: room.currentTime,
 					startTime: room.startTime,
 					listeners: uniqueListenersCount,
@@ -621,8 +629,8 @@ Music.voteSkip = async function (socket, data) {
 					votes: []
 				}
 			});
-		} else {
-			// 如果没有下一首，则停止播放
+
+			// 清空房间状态
 			room.currentTrack = null;
 			room.isPlaying = false;
 			room.currentTime = 0;
@@ -684,7 +692,7 @@ Music.getRoomUsers = async function (socket, data) {
 			return {
 				uid: userData.uid,
 				username: userData.username,
-				picture: userData.picture || '/assets/images/default-avatar.png',
+				picture: userData.picture || '/assets/uploads/system/avatar-default.jpeg',
 				isHost: userData.uid === room.hostId,
 				isYou: userData.uid === socket.uid
 			};
@@ -693,7 +701,7 @@ Music.getRoomUsers = async function (socket, data) {
 			return {
 				uid: uid,
 				username: 'Unknown',
-				picture: '/assets/images/default-avatar.png',
+				picture: '/assets/uploads/system/avatar-default.jpeg',
 				isHost: uid === room.hostId,
 				isYou: uid === socket.uid
 			};
@@ -724,7 +732,7 @@ Music.getRoomUsersList = async function (roomId) {
 			return {
 				uid: userData.uid,
 				username: userData.username,
-				picture: userData.picture || '/assets/images/default-avatar.png',
+				picture: userData.picture || '/assets/uploads/system/avatar-default.jpeg',
 				isHost: userData.uid === room.hostId
 			};
 		} catch (err) {
@@ -732,7 +740,7 @@ Music.getRoomUsersList = async function (roomId) {
 			return {
 				uid: uid,
 				username: 'Unknown',
-				picture: '/assets/images/default-avatar.png',
+				picture: '/assets/uploads/system/avatar-default.jpeg',
 				isHost: uid === room.hostId
 			};
 		}
@@ -802,6 +810,45 @@ Music.removeFromPlaylist = async function (socket, data) {
 			}
 		});
 	}
+
+	return { success: true };
+};
+
+// 发送聊天消息
+Music.sendChat = async function (socket, data) {
+	const { roomId, content } = data;
+	if (!roomId) {
+		throw new Error('Invalid room ID');
+	}
+	if (!content || content.trim() === '') {
+		throw new Error('Message content cannot be empty');
+	}
+
+	const room = musicRooms.get(roomId);
+	if (!room) {
+		throw new Error('Room not found');
+	}
+
+	// 获取发送者信息
+	const user = require('../user');
+	const userData = await user.getUserFields(socket.uid, ['username', 'picture', 'uid']);
+
+	// 构建消息对象
+	const message = {
+		username: userData.username,
+		uid: userData.uid,
+		picture: userData.picture || '/assets/uploads/system/avatar-default.jpeg',
+		content: content.trim(),
+		timestamp: Date.now(),
+		system: false
+	};
+
+	// 广播消息给房间内所有用户
+	const io = require('./index').server;
+	io.to(`music_room_${roomId}`).emit('event:music.chat', {
+		message: message,
+		isOwn: false
+	});
 
 	return { success: true };
 };
