@@ -1,6 +1,17 @@
 <!-- 全屏背景 -->
 <div class="music-room-bg"></div>
 
+<!-- 全屏播放覆盖层 -->
+<div id="play-overlay" class="play-overlay hidden">
+	<div class="play-overlay-content">
+		<div class="play-overlay-icon">
+			<i class="fa fa-play-circle"></i>
+		</div>
+		<div class="play-overlay-title">点击任意位置开始播放</div>
+		<div class="play-overlay-desc">浏览器需要用户交互后才能播放音频</div>
+	</div>
+</div>
+
 <!-- 内容容器 -->
 <div class="music-room-wrapper">
 	<div class="row g-0">
@@ -182,6 +193,98 @@
 				font-weight: bold;
 				transform: scale(1.05);
 			}
+
+			/* 正在播放的歌曲样式 */
+			.track-playing {
+				background: linear-gradient(135deg, rgba(0, 123, 255, 0.1) 0%, rgba(0, 123, 255, 0.05) 100%) !important;
+				border-left: 4px solid #007bff !important;
+				transition: all 0.3s ease;
+			}
+
+			.track-playing:hover {
+				background: linear-gradient(135deg, rgba(0, 123, 255, 0.15) 0%, rgba(0, 123, 255, 0.08) 100%) !important;
+				transform: translateX(4px);
+			}
+
+			/* 全屏播放覆盖层 */
+			.play-overlay {
+				position: fixed;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				background: rgba(0, 0, 0, 0.85);
+				backdrop-filter: blur(10px);
+				-webkit-backdrop-filter: blur(10px);
+				z-index: 9999;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				color: white;
+				transition: opacity 0.5s ease;
+			}
+
+			.play-overlay.hidden {
+				opacity: 0;
+				pointer-events: none;
+			}
+
+			.play-overlay-content {
+				text-align: center;
+				padding: 2rem;
+			}
+
+			.play-overlay-icon {
+				font-size: 80px;
+				margin-bottom: 2rem;
+				opacity: 0.9;
+				animation: pulse 2s infinite;
+			}
+
+			.play-overlay-title {
+				font-size: 24px;
+				font-weight: bold;
+				margin-bottom: 1rem;
+			}
+
+			.play-overlay-desc {
+				font-size: 16px;
+				opacity: 0.8;
+				margin-bottom: 2rem;
+			}
+
+			.play-overlay-btn {
+				font-size: 18px;
+				padding: 15px 40px;
+				border-radius: 50px;
+				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+				border: none;
+				color: white;
+				cursor: pointer;
+				transition: all 0.3s ease;
+				box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+			}
+
+			.play-overlay-btn:hover {
+				transform: translateY(-2px);
+				box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+			}
+
+			.play-overlay-btn:active {
+				transform: translateY(0);
+			}
+
+			@keyframes pulse {
+				0%, 100% {
+					transform: scale(1);
+					opacity: 0.9;
+				}
+				50% {
+					transform: scale(1.05);
+					opacity: 1;
+				}
+			}
 			.album-cover img {
 				width: 200px;
 				height: 200px;
@@ -215,6 +318,187 @@
 				backdrop-filter: blur(10px);
 				-webkit-backdrop-filter: blur(10px);
 			}
+
+			/* 房间用户列表弹出框 */
+			.room-users-popover {
+				position: fixed;
+				background: rgba(255, 255, 255, 0.95);
+				backdrop-filter: blur(15px);
+				-webkit-backdrop-filter: blur(15px);
+				border-radius: 16px;
+				min-width: 280px;
+				max-width: 320px;
+				max-height: 500px;
+				overflow: hidden;
+				z-index: 1000;
+				box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+				border: 1px solid rgba(255, 255, 255, 0.3);
+				animation: slideInLeft 0.3s ease;
+			}
+
+			@keyframes slideInLeft {
+				from {
+					opacity: 0;
+					transform: translateX(-10px);
+				}
+				to {
+					opacity: 1;
+					transform: translateX(0);
+				}
+			}
+
+			.room-users-popover-header {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				padding: 14px 18px;
+				border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+				background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+			}
+
+			.room-users-popover-header span {
+				font-weight: 700;
+				color: #495057;
+				font-size: 14px;
+				letter-spacing: 0.5px;
+			}
+
+			.room-users-popover-header i {
+				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+				-webkit-background-clip: text;
+				-webkit-text-fill-color: transparent;
+				background-clip: text;
+			}
+
+			.room-users-popover-body {
+				max-height: 400px;
+				overflow-y: auto;
+				padding: 8px;
+			}
+
+			.room-users-list {
+				display: flex;
+				flex-direction: column;
+				gap: 6px;
+			}
+
+			.room-user-item {
+				display: flex;
+				align-items: center;
+				padding: 12px 14px;
+				border-radius: 10px;
+				transition: all 0.2s ease;
+				cursor: default;
+				background: rgba(255, 255, 255, 0.5);
+			}
+
+			.room-user-item:hover {
+				background: rgba(102, 126, 234, 0.08);
+				transform: translateX(2px);
+			}
+
+			.room-user-avatar {
+				width: 40px;
+				height: 40px;
+				border-radius: 50%;
+				object-fit: cover;
+				margin-right: 12px;
+				flex-shrink: 0;
+				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				color: white;
+				font-weight: 600;
+				font-size: 15px;
+				box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+			}
+
+			.room-user-info {
+				flex: 1;
+				min-width: 0;
+				overflow: hidden;
+			}
+
+			.room-user-name {
+				font-weight: 600;
+				color: #212529;
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+				margin-bottom: 4px;
+				font-size: 14px;
+			}
+
+			.room-user-badges {
+				display: flex;
+				gap: 4px;
+				flex-wrap: wrap;
+			}
+
+			.room-user-badge {
+				font-size: 10px;
+				padding: 2px 8px;
+				border-radius: 8px;
+				display: inline-block;
+				font-weight: 600;
+				letter-spacing: 0.3px;
+			}
+
+			.room-user-badge.host {
+				background: linear-gradient(135deg, #ffc107 0%, #ffb300 100%);
+				color: #5c4d00;
+				box-shadow: 0 2px 4px rgba(255, 193, 7, 0.3);
+			}
+
+			.room-user-badge.you {
+				background: linear-gradient(135deg, #28a745 0%, #218838 100%);
+				color: white;
+				box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+			}
+
+			.room-users-empty {
+				text-align: center;
+				padding: 48px 20px;
+				color: #6c757d;
+			}
+
+			.room-users-empty i {
+				font-size: 48px;
+				margin-bottom: 12px;
+				opacity: 0.3;
+				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+				-webkit-background-clip: text;
+				-webkit-text-fill-color: transparent;
+				background-clip: text;
+			}
+
+			.room-users-empty p {
+				font-size: 14px;
+				margin: 0;
+			}
+
+			.cursor-pointer {
+				cursor: pointer;
+			}
+
+			/* 隐藏滚动条但保留滚动功能 */
+			.room-users-popover-body::-webkit-scrollbar {
+				width: 4px;
+			}
+
+			.room-users-popover-body::-webkit-scrollbar-track {
+				background: transparent;
+			}
+
+			.room-users-popover-body::-webkit-scrollbar-thumb {
+				background: rgba(102, 126, 234, 0.2);
+				border-radius: 2px;
+			}
+
+			.room-users-popover-body::-webkit-scrollbar-thumb:hover {
+				background: rgba(102, 126, 234, 0.4);
+			}
 		</style>
 
 		<div class="music-room-container h-100">
@@ -231,7 +515,7 @@
 								<div class="track-info mb-4">
 									<h2 id="track-name" class="fw-bold mb-1">未播放</h2>
 									<p id="track-artist" class="text-muted lead mb-2">-</p>
-									<div id="room-info" class="badge rounded-pill bg-light text-dark px-3 py-2 shadow-sm">
+									<div id="room-info" class="badge rounded-pill bg-light text-dark px-3 py-2 shadow-sm cursor-pointer" data-bs-toggle="tooltip" data-bs-placement="top" title="查看房间用户">
 										<i class="fa fa-users text-primary me-2"></i><span id="listener-count" class="fw-bold">0</span> 人正在收听
 									</div>
 								</div>
@@ -247,14 +531,7 @@
 								</div>
 								</div>
 
-								<!-- 控制按钮 -->
-								<div class="d-flex justify-content-center align-items-center gap-4 mb-4">
-									<div class="d-none">
-										<button id="prev-btn"></button>
-										<button id="play-btn"></button>
-										<button id="next-btn"></button>
-									</div>
-								</div>
+
 
 								<!-- 音量控制 -->
 								<div class="volume-control d-flex align-items-center justify-content-center gap-3 px-4">
@@ -277,6 +554,20 @@
 										<p class="lead">同步歌词，让听歌更有氛围</p>
 									</div>
 								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- 用户列表 hover 弹出框（移到外部以避免被裁剪） -->
+				<div id="room-users-popover" class="room-users-popover shadow-lg rounded-3" style="display: none;">
+					<div class="room-users-popover-header">
+						<span><i class="fa fa-users me-2"></i>房间用户</span>
+					</div>
+					<div class="room-users-popover-body">
+						<div id="room-users-list" class="room-users-list">
+							<div class="text-center text-muted py-3">
+								<i class="fa fa-spinner fa-spin me-2"></i>加载中...
 							</div>
 						</div>
 					</div>
