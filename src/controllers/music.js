@@ -90,9 +90,22 @@ MusicController.setCookie = async function (req, res, next) {
 
 // 代理QQ音乐搜索
 MusicController.search = async function (req, res, next) {
-	const { key, t = '0', pageNo = 1, pageSize = 20 } = req.body;
+	const { key, t = '0', pageNo = 1, pageSize = 20, type = 'song', source = 'qq' } = req.body;
 
 	try {
+		console.log('[Music Controller] Search request:', { key, t, pageNo, pageSize, type, source });
+
+		// 目前只支持QQ音乐歌曲搜索
+		if (type !== 'song' || source !== 'qq') {
+			return res.json({
+				result: 100,
+				data: {
+					list: [],
+					total: 0
+				}
+			});
+		}
+
 		// 转发客户端的cookie到QQ音乐API
 		const cookies = req.headers.cookie;
 		const response = await fetch(`http://localhost:3300/search`, {
@@ -104,7 +117,10 @@ MusicController.search = async function (req, res, next) {
 			},
 			body: JSON.stringify({ key, t, pageNo, pageSize }),
 		});
+
 		const data = await response.json();
+		console.log('[Music Controller] Search response:', data);
+
 		res.json(data);
 	} catch (err) {
 		console.error('Failed to search songs:', err);

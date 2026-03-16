@@ -142,10 +142,35 @@ define('music/ui', [
 				const progress = (displayTime / State.audioPlayer.duration) * 100 || 0;
 				$('#progress-bar').css('width', progress + '%');
 			}
+		} else {
+			// 没有当前歌曲，重置UI显示
+			$('#track-name').text('等待播放');
+			$('#track-artist').text('-');
+			$('#album-cover').removeClass('playing').html('<i class="fa fa-music fa-5x"></i>');
+			$('#current-time').text('00:00');
+			$('#progress-bar').css('width', '0%');
+			UI.clearPageBackground();
+
+			// 清空歌词
+			if (lyricsModule) {
+				lyricsModule.clearLyrics();
+			}
+
+			// 重置上次状态
+			State.lastCoverUrl = null;
+			State.lastTrackId = null;
 		}
 
 		$('#prev-btn').prop('disabled', true);
 		$('#next-btn').prop('disabled', true);
+
+		// 如果没有当前播放歌曲，重置播放器状态
+		if (!room.currentTrack && State.audioPlayer && !State.audioPlayer.paused) {
+			console.log('[Music] No current track, stopping audio player');
+			State.audioPlayer.pause();
+			State.audioPlayer.currentTime = 0;
+			UI.showPlayOverlay();
+		}
 	};
 
 	// 更新页面背景图
@@ -220,7 +245,11 @@ define('music/ui', [
 
 	// 显示搜索结果
 	UI.showSearchResults = function (songs) {
+		console.log('[UI] showSearchResults called with songs:', songs);
+		console.log('[UI] songs length:', songs?.length);
+
 		const container = $('#search-results');
+		console.log('[UI] search-results container found:', container.length);
 
 		let html = '';
 		for (const song of songs) {
@@ -251,8 +280,21 @@ define('music/ui', [
 			`;
 		}
 
+		console.log('[UI] Setting HTML to search-results container');
 		container.html(html);
-		$('#search-results-container').show();
+
+		const $resultsContainer = $('#search-results-container');
+		console.log('[UI] Before adding visible class - inline style:', $resultsContainer.attr('style'));
+		console.log('[UI] Before adding visible class - classes:', $resultsContainer.attr('class'));
+
+		// 直接修改内联样式
+		$resultsContainer.css({
+			'visibility': 'visible',
+			'opacity': '1'
+		});
+
+		console.log('[UI] After modifying inline style:', $resultsContainer.attr('style'));
+		console.log('[UI] showSearchResults completed');
 	};
 
 	// 更新分页UI

@@ -48,6 +48,7 @@ define('music', [
 
 		$('#vote-skip-btn').off('click', Music.voteSkip);
 		$('#search-track-btn').off('click', Search.searchMusic);
+		$('.search-type-btn').off('click');
 		$('#music-search-input').off('keypress');
 		$('#prev-page-btn').off('click');
 		$('#next-page-btn').off('click');
@@ -89,6 +90,9 @@ define('music', [
 		Volume.initVolumeControl();
 
 		Users.init();
+
+		// 初始化搜索类型按钮
+		Search.initSearchTypeButtons();
 
 		$('#search-track-btn').on('click', Search.searchMusic);
 		$('#music-search-input').on('keypress', function (e) {

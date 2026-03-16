@@ -77,7 +77,7 @@
 				max-width: 95%;
 				margin-left: auto !important;
 				margin-right: auto !important;
-				padding: 2rem 1rem 1rem 1rem;
+				padding: 0 1rem 1rem 1rem;
 				width: 100%;
 			}
 
@@ -499,10 +499,169 @@
 			.room-users-popover-body::-webkit-scrollbar-thumb:hover {
 				background: rgba(102, 126, 234, 0.4);
 			}
+
+			/* 搜索类型按钮样式 */
+			.search-type-btn {
+				transition: all 0.3s ease;
+				position: relative;
+				overflow: hidden;
+				font-weight: 500;
+			}
+
+			.search-type-btn:hover {
+				transform: translateY(-2px);
+				box-shadow: 0 4px 12px rgba(0, 123, 255, 0.2);
+			}
+
+			.search-type-btn.active {
+				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+				border-color: transparent !important;
+				color: white !important;
+				box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+			}
+
+			.search-type-btn.active .source-badge {
+				background: rgba(255, 255, 255, 0.2);
+				color: white;
+			}
+
+			.source-badge {
+				font-size: 11px;
+				padding: 2px 6px;
+				border-radius: 4px;
+				background: rgba(0, 123, 255, 0.1);
+				color: #007bff;
+				font-weight: 600;
+				transition: all 0.3s ease;
+			}
+
+			/* 搜索输入框样式 */
+			#music-search-input {
+				border-radius: 25px 0 0 25px;
+				border: none;
+				box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+			}
+
+			#music-search-input:focus {
+				box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+			}
+
+			#search-track-btn {
+				border-radius: 0 25px 25px 0;
+				font-weight: 500;
+				transition: all 0.3s ease;
+			}
+
+			#search-track-btn:hover {
+				transform: translateY(-1px);
+				box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+			}
+
+			.input-group-text {
+				border-radius: 25px 0 0 25px;
+				border: none;
+				box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+			}
+
+			/* 搜索结果区域样式 */
+			#search-results-container.visible {
+				visibility: visible !important;
+				opacity: 1 !important;
+			}
+
+			#search-results-container .card {
+				border-radius: 12px;
+				overflow: hidden;
+				box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+				backdrop-filter: blur(10px);
+				background: rgba(255, 255, 255, 0.95);
+			}
+
+			#search-results {
+				max-height: 400px;
+				overflow-y: auto;
+			}
+
+			#search-results .list-group-item {
+				transition: all 0.2s ease;
+				border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+				padding: 12px 16px;
+			}
+
+			#search-results .list-group-item:hover {
+				background: rgba(0, 123, 255, 0.05) !important;
+				transform: translateX(4px);
+			}
+
+			#search-results .list-group-item:last-child {
+				border-bottom: none !important;
+			}
+
+			/* 搜索卡片容器 */
+			.card.music-search-card {
+				position: relative;
+			}
 		</style>
 
 		<div class="music-room-container h-100">
 			<div class="d-flex flex-column gap-4">
+				<!-- 搜索区域 -->
+				<div class="card music-search-card border-0 shadow-sm rounded-4 overflow-visible">
+					<div class="card-body p-4 position-relative">
+						<div class="row g-3">
+							<!-- 搜索类型选择 -->
+							<div class="col-12 col-md-auto">
+								<div class="d-flex gap-2 flex-wrap">
+									<button class="search-type-btn btn btn-primary rounded-pill px-4 py-2 active" data-type="song" data-source="qq">
+										<i class="fa fa-music me-2"></i>歌曲
+										<span class="source-badge ms-1">QQ音乐</span>
+									</button>
+									<button class="search-type-btn btn btn-outline-primary rounded-pill px-4 py-2" data-type="song" data-source="netease">
+										<i class="fa fa-music me-2"></i>歌曲
+										<span class="source-badge ms-1">网易云</span>
+									</button>
+									<button class="search-type-btn btn btn-outline-primary rounded-pill px-4 py-2" data-type="user">
+										<i class="fa fa-user me-2"></i>用户
+									</button>
+									<button class="search-type-btn btn btn-outline-primary rounded-pill px-4 py-2" data-type="playlist">
+										<i class="fa fa-list me-2"></i>歌单
+									</button>
+								</div>
+							</div>
+							<!-- 搜索输入框 -->
+							<div class="col-12 col-md">
+								<div class="input-group">
+									<span class="input-group-text bg-light border-0">
+										<i class="fa fa-search text-muted"></i>
+									</span>
+									<input type="text" id="music-search-input" class="form-control" placeholder="搜索歌曲、用户或歌单...">
+									<button id="search-track-btn" class="btn btn-primary px-4">
+										<i class="fa fa-search me-1"></i>搜索
+									</button>
+								</div>
+							</div>
+						</div>
+						<!-- 搜索结果 - 使用绝对定位，覆盖在其他内容之上 -->
+						<div id="search-results-container" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; margin-top: 8px; visibility: hidden; opacity: 0; transition: all 0.3s ease;">
+							<div class="card border-0 shadow-sm">
+								<div class="card-body p-0">
+									<div id="search-results" class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;"></div>
+								</div>
+								<!-- 分页 -->
+								<div id="search-pagination" class="card-footer border-0 bg-light py-2 px-3 d-flex justify-content-between align-items-center" style="display: none;">
+									<button id="prev-page-btn" class="btn btn-sm btn-outline-primary" disabled>
+										<i class="fa fa-chevron-left"></i>
+									</button>
+									<span class="text-muted small">第 <span id="current-page">1</span> 页</span>
+									<button id="next-page-btn" class="btn btn-sm btn-outline-primary" disabled>
+										<i class="fa fa-chevron-right"></i>
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
 				<!-- 音乐播放器和歌词 -->
 				<div class="card music-player border-0 shadow-sm rounded-4 overflow-hidden">
 					<div class="card-body p-4 p-md-5">
@@ -581,42 +740,12 @@
 								<h5 class="card-title fw-bold mb-0"><i class="fa fa-list-ul text-primary me-2"></i>播放列表</h5>
 							</div>
 							<div class="card-body p-4">
-								<div id="playlist-container">
-									<!-- 搜索框 -->
-									<div class="input-group mb-3 shadow-sm">
-										<span class="input-group-text bg-light border-0">
-											<i class="fa fa-search text-muted"></i>
-										</span>
-										<input type="text" id="music-search-input" class="form-control" placeholder="搜索音乐...">
-										<button id="search-track-btn" class="btn btn-primary">
-											<i class="fa fa-search"></i>
-										</button>
-									</div>
-									<!-- 搜索结果 -->
-									<div id="search-results-container" style="display: none;">
-										<div class="card border-0 shadow-sm mb-3">
-											<div class="card-body p-0">
-												<div id="search-results" class="list-group list-group-flush" style="max-height: 350px; overflow-y: auto;"></div>
-											</div>
-											<!-- 分页 -->
-											<div id="search-pagination" class="card-footer border-0 bg-light py-2 px-3 d-flex justify-content-between align-items-center" style="display: none;">
-												<button id="prev-page-btn" class="btn btn-sm btn-outline-primary" disabled>
-													<i class="fa fa-chevron-left"></i>
-												</button>
-												<span class="text-muted small">第 <span id="current-page">1</span> 页</span>
-												<button id="next-page-btn" class="btn btn-sm btn-outline-primary" disabled>
-													<i class="fa fa-chevron-right"></i>
-												</button>
-											</div>
-										</div>
-									</div>
-									<!-- 播放列表 -->
-									<div id="playlist" class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
-										<div class="text-center text-muted py-5">
-											<i class="fa fa-compact-disc fa-3x mb-3 opacity-25 fa-spin"></i>
-											<p>播放列表为空</p>
-											<p class="text-sm">快去搜索并添加你喜欢的歌曲吧</p>
-										</div>
+								<!-- 播放列表 -->
+								<div id="playlist" class="list-group list-group-flush" style="max-height: 500px; overflow-y: auto;">
+									<div class="text-center text-muted py-5">
+										<i class="fa fa-compact-disc fa-3x mb-3 opacity-25 fa-spin"></i>
+										<p>播放列表为空</p>
+										<p class="text-sm">快去搜索并添加你喜欢的歌曲吧</p>
 									</div>
 								</div>
 							</div>
