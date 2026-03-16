@@ -60,7 +60,12 @@ define('music/rooms', [
 		if (roomListInterval) {
 			clearInterval(roomListInterval);
 		}
-		roomListInterval = setInterval(loadRooms, 30000);
+		roomListInterval = setInterval(loadRooms, 15000);
+
+		// 刷新按钮
+		$('#refresh-rooms').on('click', function () {
+			loadRooms();
+		});
 	};
 
 	MusicRooms.removeListeners = function () {
@@ -73,6 +78,7 @@ define('music/rooms', [
 		// 移除 DOM 事件监听器
 		$('#create-music-room').off('click');
 		$('#create-room-btn').off('click');
+		$('#refresh-rooms').off('click');
 		$(document).off('click', '.join-room-btn');
 		$(document).off('click', '.delete-room-btn');
 	};

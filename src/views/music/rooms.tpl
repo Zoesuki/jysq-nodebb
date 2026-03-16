@@ -18,7 +18,7 @@
 			</div>
 
 			<div class="card border-0 shadow-sm rounded-4">
-				<div class="card-body p-4">
+					<div class="card-body p-4">
 					<div id="create-room-modal" class="modal fade" tabindex="-1">
 							<div class="modal-dialog">
 								<div class="modal-content">
@@ -46,7 +46,12 @@
 							</div>
 						</div>
 
-						<h5 class="fw-bold mb-4"><i class="fa fa-fire text-danger me-2"></i>活跃房间</h5>
+						<div class="d-flex justify-content-between align-items-center mb-4">
+							<h5 class="fw-bold mb-0"><i class="fa fa-fire text-danger me-2"></i>活跃房间</h5>
+							<button id="refresh-rooms" class="btn btn-outline-primary btn-sm">
+								<i class="fa fa-refresh me-1"></i> 刷新
+							</button>
+						</div>
 						<div id="rooms-list" class="row g-4">
 							<div class="col-12 text-center text-muted py-5">
 								<i class="fa fa-music fa-3x mb-3 opacity-25"></i>

@@ -500,7 +500,7 @@ Music.addToPlaylist = async function (socket, data) {
 	// 检查歌曲是否正在播放或已在播放列表中
 	const isCurrent = room.currentTrack && room.currentTrack.id === track.id;
 	const inPlaylist = room.playlist.find(t => t.id === track.id);
-	
+
 	if (isCurrent || inPlaylist) {
 		return { success: true, alreadyExists: true };
 	}
@@ -513,12 +513,23 @@ Music.addToPlaylist = async function (socket, data) {
 	// 添加歌曲到播放列表
 	room.playlist.push(track);
 
+	const io = require('./index').server;
+
+	// 发送点歌系统消息
+	io.to(`music_room_${roomId}`).emit('event:music.chat', {
+		message: {
+			username: '系统',
+			content: `${userData.username} 点了歌曲：${track.name}`,
+			timestamp: Date.now(),
+			system: true
+		}
+	});
+
 	// 如果房间当前没有播放歌曲，则自动播放这第一首歌
 	if (!room.currentTrack) {
 		await Music.doPlay(roomId, track);
 	} else {
 		// 否则，只需要通知播放列表已更新
-		const io = require('./index').server;
 		io.to(`music_room_${roomId}`).emit('event:music.playlist.update', {
 			playlist: room.playlist
 		});
