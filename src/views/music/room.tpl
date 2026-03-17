@@ -186,12 +186,22 @@
 				transition: all 0.3s ease;
 				margin: 5px 0;
 				cursor: default;
+				line-height: 1.6;
+			}
+			.lyric-line .lyric-trans {
+				display: block;
+				font-size: 0.9em;
+				color: #6c757d;
+				margin-top: 4px;
 			}
 			.lyric-line.active {
 				opacity: 1;
 				color: #007bff;
 				font-weight: bold;
 				transform: scale(1.05);
+			}
+			.lyric-line.active .lyric-trans {
+				color: #495057;
 			}
 
 			/* 正在播放的歌曲样式 */
@@ -774,18 +784,15 @@
 											<div class="search-dropdown-item active" data-type="song" data-source="qq">
 												<i class="fa fa-music search-dropdown-icon"></i>歌曲
 											</div>
-											<div class="search-dropdown-item" data-type="user" data-source="qq">
-												<i class="fa fa-music search-dropdown-icon"></i>用户
-											</div>
 											<div class="search-dropdown-item" data-type="playlist" data-source="qq">
-												<i class="fa fa-music search-dropdown-icon"></i>歌单
+												<i class="fa fa-heart search-dropdown-icon"></i>收藏歌单
+											</div>
+											<div class="search-dropdown-item" data-type="user-playlist" data-source="qq">
+												<i class="fa fa-list search-dropdown-icon"></i>自建歌单
 											</div>
 											<div class="search-dropdown-header">网易云音乐</div>
 											<div class="search-dropdown-item" data-type="song" data-source="netease">
 												<i class="fa fa-compact-disc search-dropdown-icon"></i>歌曲
-											</div>
-											<div class="search-dropdown-item" data-type="user" data-source="netease">
-												<i class="fa fa-compact-disc search-dropdown-icon"></i>用户
 											</div>
 											<div class="search-dropdown-item" data-type="playlist" data-source="netease">
 												<i class="fa fa-compact-disc search-dropdown-icon"></i>歌单

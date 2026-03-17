@@ -301,13 +301,66 @@ define('music/ui', [
 	};
 
 	// 显示搜索结果
-	UI.showSearchResults = function (songs) {
-
+	UI.showSearchResults = function (items, type = 'song') {
 		const container = $('#search-results');
 		const defaultCover = 'https://y.gtimg.cn/music/photo_new/T002R300x300M000002eS9mS2YvTf8.jpg';
 
 		let html = '';
-		for (const song of songs) {
+
+		if (type === 'playlist') {
+			// 显示收藏歌单列表
+			for (const playlist of items) {
+				const playlistId = playlist.dissid;
+				const playlistName = playlist.dissname || '未知歌单';
+				const creator = playlist.nickname || '未知创建者';
+				const songCount = playlist.songnum || 0;
+				const coverUrl = playlist.logo || defaultCover;
+
+				html += `
+					<div class="list-group-item d-flex justify-content-between align-items-center" data-playlist-id="${playlistId}" data-playlist-name="${playlistName}">
+						<div class="d-flex align-items-center" style="flex: 1; min-width: 0;">
+							<img src="${coverUrl}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 12px; flex-shrink: 0;" alt="${playlistName}" onerror="this.onerror=null; this.src='${defaultCover}';">
+							<div style="flex: 1; min-width: 0; overflow: hidden;">
+								<div class="fw-bold text-truncate">${playlistName}</div>
+								<small class="text-muted text-truncate">${creator} · ${songCount} 首歌曲</small>
+							</div>
+						</div>
+						<div class="d-flex align-items-center flex-shrink-0">
+							<button class="btn btn-sm btn-outline-primary search-playlist-detail-btn" style="margin-right: 8px;">
+								<i class="fa fa-list"></i>
+							</button>
+						</div>
+					</div>
+				`;
+			}
+		} else if (type === 'user-playlist') {
+			// 显示自建歌单列表
+			for (const playlist of items) {
+				const playlistId = playlist.tid;
+				const playlistName = playlist.diss_name || '未知歌单';
+				const songCount = playlist.song_cnt || 0;
+				const coverUrl = playlist.diss_cover || defaultCover;
+
+				html += `
+					<div class="list-group-item d-flex justify-content-between align-items-center" data-playlist-id="${playlistId}" data-playlist-name="${playlistName}">
+						<div class="d-flex align-items-center" style="flex: 1; min-width: 0;">
+							<img src="${coverUrl}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 12px; flex-shrink: 0;" alt="${playlistName}" onerror="this.onerror=null; this.src='${defaultCover}';">
+							<div style="flex: 1; min-width: 0; overflow: hidden;">
+								<div class="fw-bold text-truncate">${playlistName}</div>
+								<small class="text-muted text-truncate">${songCount} 首歌曲</small>
+							</div>
+						</div>
+						<div class="d-flex align-items-center flex-shrink-0">
+							<button class="btn btn-sm btn-outline-primary search-playlist-detail-btn" style="margin-right: 8px;">
+								<i class="fa fa-list"></i>
+							</button>
+						</div>
+					</div>
+				`;
+			}
+	} else {
+		// 显示歌曲搜索结果或歌单详情
+		for (const song of items) {
 			const songName = song.songname || song.title || '未知歌曲';
 			const singer = (song.singer || []).map(s => s.name).join(', ') || '未知歌手';
 			const album = song.albumname || '';
@@ -316,23 +369,24 @@ define('music/ui', [
 			const duration = song.interval ? State.formatTime(song.interval) : '';
 			const coverUrl = albummid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albummid}.jpg` : defaultCover;
 
-			html += `
-				<div class="list-group-item d-flex justify-content-between align-items-center" data-songmid="${songmid}" data-albummid="${albummid}" data-songname="${songName}" data-singer="${singer}" data-cover="${coverUrl}">
-					<div class="d-flex align-items-center" style="flex: 1; min-width: 0;">
-						<img src="${coverUrl}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 12px; flex-shrink: 0;" alt="${songName}" onerror="this.onerror=null; this.src='${defaultCover}';">
-						<div style="flex: 1; min-width: 0; overflow: hidden;">
-							<div class="fw-bold text-truncate">${songName}</div>
-							<small class="text-muted text-truncate">${singer} ${album ? '- ' + album : ''}</small>
+				html += `
+					<div class="list-group-item d-flex justify-content-between align-items-center" data-songmid="${songmid}" data-albummid="${albummid}" data-songname="${songName}" data-singer="${singer}" data-cover="${coverUrl}">
+						<div class="d-flex align-items-center" style="flex: 1; min-width: 0;">
+							<img src="${coverUrl}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 12px; flex-shrink: 0;" alt="${songName}" onerror="this.onerror=null; this.src='${defaultCover}';">
+							<div style="flex: 1; min-width: 0; overflow: hidden;">
+								<div class="fw-bold text-truncate">${songName}</div>
+								<small class="text-muted text-truncate">${singer} ${album ? '- ' + album : ''}</small>
+							</div>
+						</div>
+						<div class="d-flex align-items-center flex-shrink-0">
+							<small class="text-muted me-3">${duration}</small>
+							<button class="btn btn-sm btn-primary add-song-btn">
+								<i class="fa fa-plus"></i>
+							</button>
 						</div>
 					</div>
-					<div class="d-flex align-items-center flex-shrink-0">
-						<small class="text-muted me-3">${duration}</small>
-						<button class="btn btn-sm btn-primary add-song-btn">
-							<i class="fa fa-plus"></i>
-						</button>
-					</div>
-				</div>
-			`;
+				`;
+			}
 		}
 
 		container.html(html);
@@ -347,7 +401,6 @@ define('music/ui', [
 			'visibility': 'visible',
 			'opacity': '1'
 		});
-
 	};
 
 	// 更新分页UI
@@ -405,6 +458,8 @@ define('music/ui', [
 		State.currentTrack = null;
 		State.lastTrackId = null;
 		State.lastCoverUrl = null;
+		State.lastPlaylistJson = null; // 重置播放列表缓存
+		State.playlist = []; // 清空播放列表
 
 		// 清空音频播放器
 		if (State.audioPlayer) {

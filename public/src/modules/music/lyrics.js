@@ -13,7 +13,12 @@ define('music/lyrics', [
 			const data = await response.json();
 
 			if (data.result === 100 && data.data && data.data.lyric) {
-				Lyrics.parseLyrics(data.data.lyric);
+				// 如果有翻译（trans），使用双语歌词
+				if (data.data.trans) {
+					Lyrics.parseLyrics(data.data.lyric, data.data.trans);
+				} else {
+					Lyrics.parseLyrics(data.data.lyric);
+				}
 			} else {
 				$('#lyrics-container').html(`
 					<div class="text-muted">
@@ -27,7 +32,8 @@ define('music/lyrics', [
 	};
 
 	// 解析歌词
-	Lyrics.parseLyrics = function (lrcText) {
+	Lyrics.parseLyrics = function (lrcText, transText = null) {
+
 		if (!lrcText) {
 			$('#lyrics-container').html(`
 				<div class="text-muted">
@@ -38,18 +44,31 @@ define('music/lyrics', [
 		}
 
 		const lines = lrcText.split('\n');
+		const transLines = transText ? transText.split('\n') : null;
 		State.lyricsLines = [];
 
-		for (const line of lines) {
-			const match = line.match(/\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			// 支持两种时间格式：[mm:ss.xxx] 和 [mm:ss:xxx]
+			const match = line.match(/\[(\d{2}):(\d{2})[:.](\d{2,3})\](.*)/);
 			if (match) {
 				const minutes = parseInt(match[1]);
 				const seconds = parseInt(match[2]);
 				const milliseconds = parseInt(match[3]);
 				const time = minutes * 60 + seconds + milliseconds / 1000;
 				const text = match[4].trim();
+
+				// 如果有翻译，解析对应的翻译行
+				let trans = null;
+				if (transLines && i < transLines.length) {
+					const transMatch = transLines[i].match(/\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);
+					if (transMatch) {
+						trans = transMatch[4].trim();
+					}
+				}
+
 				if (text) {
-					State.lyricsLines.push({ time, text });
+					State.lyricsLines.push({ time, text, trans });
 				}
 			}
 		}
@@ -72,7 +91,16 @@ define('music/lyrics', [
 
 		let html = '';
 		for (let i = 0; i < State.lyricsLines.length; i++) {
-			html += `<p class="lyric-line" data-time="${State.lyricsLines[i].time}" data-index="${i}">${State.lyricsLines[i].text}</p>`;
+			const lyricLine = State.lyricsLines[i];
+			// 如果有翻译，显示双语歌词
+			if (lyricLine.trans) {
+				html += `<p class="lyric-line" data-time="${lyricLine.time}" data-index="${i}">
+					${lyricLine.text}<br>
+					<span class="lyric-trans">${lyricLine.trans}</span>
+				</p>`;
+			} else {
+				html += `<p class="lyric-line" data-time="${lyricLine.time}" data-index="${i}">${lyricLine.text}</p>`;
+			}
 		}
 		container.html(html);
 	};

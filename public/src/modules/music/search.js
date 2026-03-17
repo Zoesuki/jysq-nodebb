@@ -4,11 +4,17 @@ define('music/search', [
 	'music/state',
 	'music/ui'
 ], function (alerts, State, UI) {
-	const Search = {};
+const Search = {};
 
-	// 当前搜索类型和来源
-	Search.searchType = 'song'; // song, user, playlist
-	Search.searchSource = 'qq'; // qq, netease
+// 当前搜索类型和来源
+Search.searchType = 'song'; // song, playlist, user-playlist
+Search.searchSource = 'qq'; // qq, netease
+// 是否正在搜索歌单详情
+Search.isSearchingPlaylistDetail = false;
+// 当前搜索的歌单ID（仅用于歌单详情搜索）
+Search.currentPlaylistId = null;
+// 缓存的歌单所有歌曲（用于前端分页）
+Search.cachedPlaylistSongs = null;
 
 	// 初始化搜索类型下拉菜单
 	Search.initSearchTypeButtons = function () {
@@ -30,6 +36,10 @@ define('music/search', [
 			// 更新搜索类型
 			Search.searchType = type;
 			Search.searchSource = source;
+			// 重置歌单详情搜索标志和歌单ID
+			Search.isSearchingPlaylistDetail = false;
+			Search.currentPlaylistId = null;
+			Search.cachedPlaylistSongs = null;
 
 			// 更新按钮显示文本
 			const sourceNames = {
@@ -38,13 +48,18 @@ define('music/search', [
 			};
 			const typeNames = {
 				'song': '歌曲',
-				'user': '用户',
-				'playlist': '歌单'
+				'playlist': '收藏歌单',
+				'user-playlist': '自建歌单'
 			};
 			$('#current-search-type').text(`${sourceNames[source] || ''} ${typeNames[type] || ''}`);
 
 			// 更新占位符文本
-			const placeholder = `搜索${sourceNames[source] || ''}${typeNames[type] || ''}...`;
+			let placeholder = '';
+			if (type === 'playlist' || type === 'user-playlist') {
+				placeholder = `搜索${sourceNames[source] || ''}${typeNames[type] || ''}(QQ号)...`;
+			} else {
+				placeholder = `搜索${sourceNames[source] || ''}${typeNames[type] || ''}...`;
+			}
 			$('#music-search-input').attr('placeholder', placeholder);
 
 			// 清空之前的搜索结果和状态
@@ -57,7 +72,6 @@ define('music/search', [
 			});
 			$('#search-results').empty();
 
-			console.log('[Search] Type:', Search.searchType, 'Source:', Search.searchSource);
 		});
 
 		// 搜索类型按钮点击切换
@@ -69,7 +83,11 @@ define('music/search', [
 		// 点击外部关闭搜索结果和下拉菜单
 		$(document).on('click', function (e) {
 			const $container = $('.search-container');
+			const $resultsContainer = $('#search-results-container');
 			const $target = $(e.target);
+
+			// 检查点击是否在搜索结果容器内
+			const isInResultsContainer = $resultsContainer.is($target) || $resultsContainer.has($target).length > 0;
 
 			// 如果点击的不是搜索容器内部，则关闭搜索结果和下拉菜单
 			if (!$container.is($target) && $container.has($target).length === 0) {
@@ -80,28 +98,38 @@ define('music/search', [
 				$('#search-type-btn').removeClass('show');
 				$('.search-dropdown-menu').removeClass('show');
 			}
+			// 如果点击的是搜索容器内部，但在搜索结果容器外部，只关闭下拉菜单
+			else if (!isInResultsContainer) {
+				$('#search-type-btn').removeClass('show');
+				$('.search-dropdown-menu').removeClass('show');
+			}
 		});
 	};
 
 	// 搜索音乐
 	Search.searchMusic = async function (isPageChange = false) {
-		console.log('[Search] searchMusic called, isPageChange:', isPageChange);
 
 		const keyword = $('#music-search-input').val().trim();
-		console.log('[Search] Input value:', $('#music-search-input').val());
-		console.log('[Search] Keyword:', keyword);
-		console.log('[Search] Current State.searchKeyword:', State.searchKeyword);
-		
+
+		// 如果是歌单详情的分页切换，直接显示缓存的歌单数据
+		if (isPageChange && Search.isSearchingPlaylistDetail && Search.cachedPlaylistSongs) {
+			const startIndex = (State.searchPageNo - 1) * 10;
+			const endIndex = startIndex + 10;
+			const paginatedSongs = Search.cachedPlaylistSongs.slice(startIndex, endIndex);
+
+			UI.updatePaginationUI();
+			UI.showSearchResults(paginatedSongs, 'playlist_detail');
+			return;
+		}
+
 		// 如果是分页切换，使用缓存的搜索词
 		if (isPageChange) {
 			// 如果没有缓存的搜索词，且当前输入框也没有内容，则不执行搜索
 			if (!State.searchKeyword && !keyword) {
-				console.log('[Search] No keyword available for pagination');
 				return;
 			}
 			// 优先使用缓存的搜索词
 			State.searchKeyword = State.searchKeyword || keyword;
-			console.log('[Search] Using cached keyword for pagination:', State.searchKeyword);
 		} else {
 			// 新搜索，必须有关键词
 			if (!keyword) {
@@ -114,7 +142,6 @@ define('music/search', [
 				return;
 			}
 			// 更新缓存的关键词
-			console.log('[Search] Updating cached keyword from', State.searchKeyword, 'to', keyword);
 			State.searchKeyword = keyword;
 			State.searchPageNo = 1;
 		}
@@ -124,35 +151,72 @@ define('music/search', [
 		$searchBtn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> 搜索中...');
 
 		try {
-			// 根据搜索类型构建请求参数
-			const searchParams = {
-				key: State.searchKeyword,
-				pageNo: State.searchPageNo,
-				pageSize: 10,
-				type: Search.searchType,
-				source: Search.searchSource
-			};
+			let apiUrl, searchParams;
 
-			// 歌曲搜索需要 t 参数
-			if (Search.searchType === 'song') {
-				searchParams.t = '0';
+			// 根据搜索类型构建请求参数
+			if (Search.isSearchingPlaylistDetail) {
+				// 搜索歌单详情，使用当前歌单ID
+				apiUrl = `/api/music/playlist/${Search.currentPlaylistId}`;
+				searchParams = {};
+			} else if (Search.searchType === 'playlist') {
+				// 搜索收藏歌单列表
+				searchParams = {
+					key: State.searchKeyword,
+					pageNo: State.searchPageNo,
+					pageSize: 10
+				};
+				apiUrl = '/api/music/search/playlist';
+			} else if (Search.searchType === 'user-playlist') {
+				// 搜索自建歌单列表
+				searchParams = {
+					key: State.searchKeyword,
+					pageNo: State.searchPageNo,
+					pageSize: 10
+				};
+				apiUrl = '/api/music/search/user-playlist';
+			} else {
+				// 搜索歌曲
+				searchParams = {
+					key: State.searchKeyword,
+					pageNo: State.searchPageNo,
+					pageSize: 10,
+					type: Search.searchType,
+					source: Search.searchSource
+				};
+				apiUrl = '/api/music/search';
+
+				// 歌曲搜索需要 t 参数
+				if (Search.searchType === 'song') {
+					searchParams.t = '0';
+				}
 			}
 
-			console.log('[Search] Sending request with params:', searchParams);
-
-			const response = await fetch('/api/music/search', {
-				method: 'POST',
-				headers: {
+			// 构建fetch请求
+			const fetchOptions = {
+				method: Search.isSearchingPlaylistDetail ? 'GET' : 'POST',
+				headers: Search.isSearchingPlaylistDetail ? {} : {
 					'Content-Type': 'application/json',
 				},
 				credentials: 'include',
-				body: JSON.stringify(searchParams),
-			});
+			};
+
+			// 只有搜索和搜索歌单列表时才添加body
+			if (!Search.isSearchingPlaylistDetail) {
+				fetchOptions.body = JSON.stringify(searchParams);
+			}
+
+			console.log('[Search] Fetching from:', apiUrl);
+
+			const response = await fetch(apiUrl, fetchOptions);
 			const data = await response.json();
 
 			console.log('[Search] Response data:', data);
 
-			if (data.result !== 100 || !data.data.list || data.data.list.length === 0) {
+			// 歌单详情使用 songlist 字段，其他搜索使用 list 字段
+			const listField = Search.isSearchingPlaylistDetail ? 'songlist' : 'list';
+			const items = data.data[listField];
+
+			if (data.result !== 100 || !items || items.length === 0) {
 				console.log('[Search] Condition failed - hiding results container');
 				$('#search-results-container').css({
 					'visibility': 'hidden',
@@ -167,8 +231,8 @@ define('music/search', [
 					};
 					const typeNames = {
 						'song': '歌曲',
-						'user': '用户',
-						'playlist': '歌单'
+						'playlist': '收藏歌单',
+						'user-playlist': '自建歌单'
 					};
 
 					let message = '';
@@ -188,19 +252,33 @@ define('music/search', [
 				return;
 			}
 
-			console.log('[Search] Condition passed - calling UI.showSearchResults with', data.data.list.length, 'songs');
+			console.log('[Search] Condition passed - calling UI.showSearchResults with', items.length, 'songs');
 
 			// 计算总页数
-			const total = data.data.total || data.data.list.length;
+			const total = data.data.total || items.length;
 			State.searchTotalPages = Math.ceil(total / 10);
 
+			let displayItems = items;
+
+			// 如果是歌单详情，进行前端分页
+			if (Search.isSearchingPlaylistDetail) {
+				// 缓存所有歌曲
+				Search.cachedPlaylistSongs = items;
+
+				// 根据当前页码截取需要显示的歌曲
+				const startIndex = (State.searchPageNo - 1) * 10;
+				const endIndex = startIndex + 10;
+				displayItems = items.slice(startIndex, endIndex);
+				console.log('[Search] Paginated playlist songs:', displayItems.length, 'of', items.length, 'total songs, page', State.searchPageNo);
+			}
+
 			// 保存搜索历史（只在首次搜索时保存）
-			if (!isPageChange) {
+			if (!isPageChange && !Search.isSearchingPlaylistDetail) {
 				Search.saveSearchHistory(State.searchKeyword);
 			}
 
 			UI.updatePaginationUI();
-			UI.showSearchResults(data.data.list);
+			UI.showSearchResults(displayItems, Search.isSearchingPlaylistDetail ? 'playlist_detail' : Search.searchType);
 			console.log('[Search] UI.showSearchResults completed');
 		} catch (err) {
 			console.error('Search failed:', err);
@@ -243,9 +321,14 @@ define('music/search', [
 			const $searchInput = $('#music-search-input');
 			const $historyContainer = $('#search-history-container');
 			const $searchContainer = $('.search-container');
+			const $resultsContainer = $('#search-results-container');
+			const $target = $(e.target);
 
-			// 检查是否点击在搜索容器外部
-			if (!$searchContainer.is(e.target) && $searchContainer.has(e.target).length === 0) {
+			// 检查是否点击在搜索容器外部，或者点击的是搜索结果容器
+			const isInResultsContainer = $resultsContainer.is($target) || $resultsContainer.has($target).length > 0;
+			const isInSearchContainer = $searchContainer.is($target) || $searchContainer.has($target).length > 0;
+
+			if (!isInSearchContainer || isInResultsContainer) {
 				$historyContainer.hide();
 			}
 		});
@@ -391,6 +474,27 @@ define('music/search', [
 	Search.bindSearchResultsEvents = function () {
 		$('#search-results').off('click', '.add-song-btn');
 		$('#playlist').off('click', '.remove-track-btn');
+		$('#search-results').off('click', '.search-playlist-detail-btn');
+
+		// 歌单详情按钮点击事件
+		$('#search-results').on('click', '.search-playlist-detail-btn', async function() {
+			const item = $(this).closest('.list-group-item');
+			const playlistId = item.data('playlist-id');
+			const playlistName = item.data('playlist-name');
+
+			console.log('[Search] Playlist detail button clicked, playlistId:', playlistId);
+
+			// 保存歌单ID到单独的变量
+			Search.currentPlaylistId = playlistId;
+			// 标记正在搜索歌单详情
+			Search.isSearchingPlaylistDetail = true;
+
+			// 更新搜索框显示为歌单名称
+			$('#music-search-input').val(playlistName);
+
+			// 执行搜索
+			await Search.searchMusic(false);
+		});
 
 		$('#search-results').on('click', '.add-song-btn', async function() {
 			const item = $(this).closest('.list-group-item');
@@ -404,8 +508,8 @@ define('music/search', [
 					credentials: 'include',
 				});
 				const data = await response.json();
-				
-				if (data.result !== 100 || !data.data) {
+
+				if (data.result !== 100 || !data.data || !data.data[songmid]) {
 					alerts.alert({
 						title: '错误',
 						message: '获取播放链接失败',
@@ -420,7 +524,7 @@ define('music/search', [
 					name: songName,
 					artist: singer,
 					cover: coverUrl,
-					url: data.data,
+					url: data.data[songmid],
 				};
 
 				const addResponse = await socket.emit('modules.music.addToPlaylist', { roomId: State.currentRoomId, track: track });

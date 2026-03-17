@@ -59,6 +59,13 @@ define('music', [
 			State.audioPlayer.removeEventListener('ended', Music.onTrackEnded);
 			State.audioPlayer.removeEventListener('loadedmetadata', Music.onMetadataLoaded);
 		}
+
+		// 重置状态缓存
+		State.lastPlaylistJson = null;
+		State.playlist = [];
+		State.currentTrack = null;
+		State.lastTrackId = null;
+		State.lastCoverUrl = null;
 	};
 
 	Music.setupRoom = function () {
@@ -114,6 +121,9 @@ define('music', [
 
 	Music.joinRoom = async function (roomId) {
 		try {
+			// 重置上次歌曲ID，确保重新进入房间时能正确获取歌词
+			State.lastTrackId = null;
+
 			try {
 				await fetch('/api/music/cookie/1342466911', {
 					credentials: 'include',

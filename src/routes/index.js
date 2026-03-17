@@ -51,8 +51,11 @@ _mounts.main = (app, middleware, controllers) => {
 	// QQ音乐API代理路由
 	app.get('/api/music/cookie/:id', controllers.music.setCookie);
 	app.post('/api/music/search', controllers.music.search);
+	app.post('/api/music/search/playlist', controllers.music.searchPlaylist);
+	app.post('/api/music/search/user-playlist', controllers.music.searchUserPlaylist);
 	app.get('/api/music/song/url/:id', controllers.music.getSongUrl);
 	app.get('/api/music/lyric/:id', controllers.music.getLyrics);
+	app.get('/api/music/playlist/:id', controllers.music.getPlaylist);
 };
 
 _mounts.mod = (app, middleware, controllers) => {

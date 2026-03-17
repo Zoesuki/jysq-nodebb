@@ -160,6 +160,34 @@ MusicController.search = async function (req, res, next) {
 	}
 };
 
+// 代理QQ音乐歌单列表搜索
+MusicController.searchPlaylist = async function (req, res, next) {
+	const { key, pageNo = 1, pageSize = 10 } = req.body;
+
+	try {
+		console.log('[Music Controller] Search playlist request:', { key, pageNo, pageSize });
+
+		// 使用QQ音乐的用户歌单搜索接口
+		const apiUrl = `http://localhost:3300/user/collect/songlist?id=${key}&pageNo=${pageNo}&pageSize=${pageSize}`;
+
+		const cookies = req.headers.cookie;
+		const response = await fetch(apiUrl, {
+			headers: {
+				'Cookie': cookies || '',
+				'Origin': 'http://localhost:4567',
+			},
+		});
+
+		const data = await response.json();
+		console.log('[Music Controller] Search playlist response:', data);
+
+		res.json(data);
+	} catch (err) {
+		console.error('Failed to search playlist:', err);
+		res.status(500).json({ result: 500, errMsg: '搜索歌单失败' });
+	}
+};
+
 // 代理QQ音乐播放链接获取
 MusicController.getSongUrl = async function (req, res, next) {
 	const { id, type = '128' } = req.params;
@@ -170,7 +198,7 @@ MusicController.getSongUrl = async function (req, res, next) {
 		console.log('[Music Controller] getSongUrl received cookies:', cookies);
 		console.log('[Music Controller] getSongUrl request headers:', Object.keys(req.headers));
 
-		const response = await fetch(`http://localhost:3300/song/url?id=${id}&type=${type}`, {
+		const response = await fetch(`http://localhost:3300/song/urls?id=${id}&type=${type}`, {
 			headers: {
 				'Cookie': cookies || '',
 				'Origin': 'http://localhost:4567',
@@ -201,5 +229,55 @@ MusicController.getLyrics = async function (req, res, next) {
 	} catch (err) {
 		console.error('Failed to get lyrics:', err);
 		res.status(500).json({ result: 500, errMsg: '获取歌词失败' });
+	}
+};
+
+// 代理QQ音乐歌单详情获取
+MusicController.getPlaylist = async function (req, res, next) {
+	const { id } = req.params;
+
+	try {
+		console.log('[Music Controller] Get playlist detail, id:', id);
+
+		const cookies = req.headers.cookie;
+		const response = await fetch(`http://localhost:3300/songlist?id=${id}`, {
+			headers: {
+				'Cookie': cookies || '',
+				'Origin': 'http://localhost:4567',
+			},
+		});
+		const data = await response.json();
+		console.log('[Music Controller] Playlist detail response:', data);
+		res.json(data);
+	} catch (err) {
+		console.error('Failed to get playlist:', err);
+		res.status(500).json({ result: 500, errMsg: '获取歌单详情失败' });
+	}
+};
+
+// 代理QQ音乐用户自建歌单搜索
+MusicController.searchUserPlaylist = async function (req, res, next) {
+	const { key, pageNo = 1, pageSize = 10 } = req.body;
+
+	try {
+		console.log('[Music Controller] Search user playlist request:', { key, pageNo, pageSize });
+
+		// 使用QQ音乐的用户自建歌单搜索接口
+		const apiUrl = `http://localhost:3300/user/songlist?id=${key}&pageNo=${pageNo}&pageSize=${pageSize}`;
+
+		const cookies = req.headers.cookie;
+		const response = await fetch(apiUrl, {
+			headers: {
+				'Cookie': cookies || '',
+				'Origin': 'http://localhost:4567',
+			},
+		});
+
+		const data = await response.json();
+		console.log('[Music Controller] Search user playlist response:', data);
+		res.json(data);
+	} catch (err) {
+		console.error('Failed to search user playlist:', err);
+		res.status(500).json({ result: 500, errMsg: '搜索用户歌单失败' });
 	}
 };
