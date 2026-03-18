@@ -516,6 +516,11 @@ Music.addToPlaylist = async function (socket, data) {
 	const userData = await user.getUserFields(socket.uid, ['username']);
 	track.addedBy = userData.username;
 
+	// 检查是否有播放 URL
+	if (!track.url) {
+		throw new Error('缺少播放链接');
+	}
+
 	// 添加歌曲到播放列表
 	room.playlist.push(track);
 

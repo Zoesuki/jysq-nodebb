@@ -106,18 +106,22 @@ define('music/rooms', [
 			return;
 		}
 
+		// 使用本地的默认封面占位图
+		const defaultCover = '/assets/images/music-cover.png';
+
 		let html = '';
 		rooms.forEach(function (room) {
 			const hasTrack = room.currentTrack && room.currentTrack.cover;
-			const cover = hasTrack ? room.currentTrack.cover : 'https://y.gtimg.cn/music/photo_new/T002R300x300M000002eS9mS2YvTf8.jpg';
+			const cover = hasTrack ? room.currentTrack.cover : defaultCover;
 			const trackName = room.currentTrack ? room.currentTrack.name : '暂无播放';
 			const artistName = room.currentTrack ? (room.currentTrack.artist || '-') : '-';
+			const defaultBg = !hasTrack ? 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);' : '';
 
 			html += `
 				<div class="col-md-6 col-lg-4">
-					<div class="card h-100 room-item border-0 shadow-sm rounded-4 overflow-hidden position-relative">
+					<div class="card h-100 room-item border-0 shadow-sm rounded-4 overflow-hidden position-relative" style="${defaultBg}">
 						<div class="room-cover-wrapper position-relative" style="height: 160px;">
-							<img src="${cover}" class="card-img-top w-100 h-100 object-fit-cover blur-bg" alt="room cover" onerror="this.onerror=null; this.src='https://y.gtimg.cn/music/photo_new/T002R300x300M000002eS9mS2YvTf8.jpg';">
+							<img src="${cover}" class="card-img-top w-100 h-100 object-fit-cover blur-bg" alt="room cover" onerror="this.onerror=null; this.src='${defaultCover}';">
 							<div class="position-absolute top-0 start-0 w-100 h-100 bg-dark opacity-50"></div>
 							<div class="position-absolute top-50 start-50 translate-middle text-white text-center w-100 px-3">
 								<h5 class="card-title mb-1 text-truncate fw-bold">${room.roomId.replace('room-', '房间 #')}</h5>
@@ -130,7 +134,7 @@ define('music/rooms', [
 						<div class="card-body p-3">
 							<div class="d-flex align-items-center mb-3">
 								<div class="flex-shrink-0 me-3">
-									<img src="${cover}" class="rounded-3 shadow-sm" style="width: 48px; height: 48px; object-fit: cover;" alt="track cover" onerror="this.onerror=null; this.src='https://y.gtimg.cn/music/photo_new/T002R300x300M000002eS9mS2YvTf8.jpg';">
+									<img src="${cover}" class="rounded-3 shadow-sm" style="width: 48px; height: 48px; object-fit: cover;" alt="track cover" onerror="this.onerror=null; this.src='${defaultCover}';">
 								</div>
 								<div class="flex-grow-1 overflow-hidden">
 									<p class="mb-0 text-truncate fw-bold text-sm">${trackName}</p>

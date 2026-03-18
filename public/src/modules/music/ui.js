@@ -278,13 +278,17 @@ define('music/ui', [
 
 		// 添加待播歌曲
 		State.playlist.forEach(function (track, index) {
+			const sourceBadge = track.source === 'netease' ?
+				'<span class="source-badge ms-1">网易云</span>' :
+				'<span class="source-badge ms-1">QQ</span>';
+
 			html += `
 				<div class="list-group-item d-flex align-items-center border-0 mb-2 rounded-3 shadow-sm" data-trackid="${track.id}" data-is-current="false">
 					<div class="flex-shrink-0 me-3">
 						${track.cover ? `<img src="${track.cover}" class="rounded-3 shadow-sm" style="width: 48px; height: 48px; object-fit: cover;" onerror="this.onerror=null; $(this).replaceWith('<div class=\'bg-light rounded-3 d-flex align-items-center justify-content-center\' style=\'width: 48px; height: 48px;\'><i class=\'fa fa-music text-muted\'></i></div>');">` : '<div class="bg-light rounded-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;"><i class="fa fa-music text-muted"></i></div>'}
 					</div>
 					<div class="flex-grow-1 overflow-hidden">
-						<div class="text-truncate fw-bold mb-0">${track.name}</div>
+						<div class="text-truncate fw-bold mb-0">${track.name}${sourceBadge}</div>
 						<div class="text-xs text-muted text-truncate">${track.artist || '-'}</div>
 					</div>
 					<div class="flex-shrink-0">
@@ -303,25 +307,43 @@ define('music/ui', [
 	// 显示搜索结果
 	UI.showSearchResults = function (items, type = 'song') {
 		const container = $('#search-results');
-		const defaultCover = 'https://y.gtimg.cn/music/photo_new/T002R300x300M000002eS9mS2YvTf8.jpg';
+		const defaultCover = '/assets/images/music-cover.png';
 
 		let html = '';
 
 		if (type === 'playlist') {
 			// 显示收藏歌单列表
 			for (const playlist of items) {
-				const playlistId = playlist.dissid;
-				const playlistName = playlist.dissname || '未知歌单';
-				const creator = playlist.nickname || '未知创建者';
-				const songCount = playlist.songnum || 0;
-				const coverUrl = playlist.logo || defaultCover;
+				// 检查是否是网易云音乐歌单
+				const isNetease = playlist.source === 'netease';
+				let playlistId, playlistName, creator, songCount, coverUrl;
+
+				if (isNetease) {
+					// 网易云格式
+					playlistId = playlist.id;
+					playlistName = playlist.name || '未知歌单';
+					creator = playlist.creator || '未知创建者';
+					songCount = playlist.trackCount || 0;
+					coverUrl = playlist.cover || defaultCover;
+				} else {
+					// QQ音乐格式
+					playlistId = playlist.dissid;
+					playlistName = playlist.dissname || '未知歌单';
+					creator = playlist.nickname || '未知创建者';
+					songCount = playlist.songnum || 0;
+					coverUrl = playlist.logo || defaultCover;
+				}
+
+				// 添加来源徽章
+				const sourceBadge = isNetease ?
+					'<span class="badge bg-secondary ms-1" style="font-size: 10px;">网易云</span>' : '';
 
 				html += `
-					<div class="list-group-item d-flex justify-content-between align-items-center" data-playlist-id="${playlistId}" data-playlist-name="${playlistName}">
+					<div class="list-group-item d-flex justify-content-between align-items-center" data-playlist-id="${playlistId}" data-playlist-name="${playlistName}" data-source="${isNetease ? 'netease' : 'qq'}">
 						<div class="d-flex align-items-center" style="flex: 1; min-width: 0;">
 							<img src="${coverUrl}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 12px; flex-shrink: 0;" alt="${playlistName}" onerror="this.onerror=null; this.src='${defaultCover}';">
 							<div style="flex: 1; min-width: 0; overflow: hidden;">
-								<div class="fw-bold text-truncate">${playlistName}</div>
+								<div class="fw-bold text-truncate">${playlistName}${sourceBadge}</div>
 								<small class="text-muted text-truncate">${creator} · ${songCount} 首歌曲</small>
 							</div>
 						</div>
@@ -336,18 +358,37 @@ define('music/ui', [
 		} else if (type === 'user-playlist') {
 			// 显示自建歌单列表
 			for (const playlist of items) {
-				const playlistId = playlist.tid;
-				const playlistName = playlist.diss_name || '未知歌单';
-				const songCount = playlist.song_cnt || 0;
-				const coverUrl = playlist.diss_cover || defaultCover;
+				// 检查是否是网易云音乐歌单
+				const isNetease = playlist.source === 'netease';
+				let playlistId, playlistName, creator, songCount, coverUrl;
+
+				if (isNetease) {
+					// 网易云格式
+					playlistId = playlist.id;
+					playlistName = playlist.name || '未知歌单';
+					creator = playlist.creator || '';
+					songCount = playlist.trackCount || 0;
+					coverUrl = playlist.cover || defaultCover;
+				} else {
+					// QQ音乐格式
+					playlistId = playlist.tid;
+					playlistName = playlist.diss_name || '未知歌单';
+					creator = '';
+					songCount = playlist.song_cnt || 0;
+					coverUrl = playlist.diss_cover || defaultCover;
+				}
+
+				// 添加来源徽章
+				const sourceBadge = isNetease ?
+					'<span class="badge bg-secondary ms-1" style="font-size: 10px;">网易云</span>' : '';
 
 				html += `
-					<div class="list-group-item d-flex justify-content-between align-items-center" data-playlist-id="${playlistId}" data-playlist-name="${playlistName}">
+					<div class="list-group-item d-flex justify-content-between align-items-center" data-playlist-id="${playlistId}" data-playlist-name="${playlistName}" data-source="${isNetease ? 'netease' : 'qq'}">
 						<div class="d-flex align-items-center" style="flex: 1; min-width: 0;">
 							<img src="${coverUrl}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 12px; flex-shrink: 0;" alt="${playlistName}" onerror="this.onerror=null; this.src='${defaultCover}';">
 							<div style="flex: 1; min-width: 0; overflow: hidden;">
-								<div class="fw-bold text-truncate">${playlistName}</div>
-								<small class="text-muted text-truncate">${songCount} 首歌曲</small>
+								<div class="fw-bold text-truncate">${playlistName}${sourceBadge}</div>
+								<small class="text-muted text-truncate">${creator ? creator + ' · ' : ''}${songCount} 首歌曲</small>
 							</div>
 						</div>
 						<div class="d-flex align-items-center flex-shrink-0">
@@ -361,33 +402,48 @@ define('music/ui', [
 	} else {
 		// 显示歌曲搜索结果或歌单详情
 		for (const song of items) {
-			const songName = song.songname || song.title || '未知歌曲';
-			const singer = (song.singer || []).map(s => s.name).join(', ') || '未知歌手';
-			const album = song.albumname || '';
-			const songmid = song.songmid;
-			const albummid = song.albummid || '';
-			const duration = song.interval ? State.formatTime(song.interval) : '';
-			const coverUrl = albummid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albummid}.jpg` : defaultCover;
+			const isNetease = song.source === 'netease';
+			const songName = song.songname || song.title || song.name || '未知歌曲';
+			let singer = '';
 
-				html += `
-					<div class="list-group-item d-flex justify-content-between align-items-center" data-songmid="${songmid}" data-albummid="${albummid}" data-songname="${songName}" data-singer="${singer}" data-cover="${coverUrl}">
-						<div class="d-flex align-items-center" style="flex: 1; min-width: 0;">
-							<img src="${coverUrl}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 12px; flex-shrink: 0;" alt="${songName}" onerror="this.onerror=null; this.src='${defaultCover}';">
-							<div style="flex: 1; min-width: 0; overflow: hidden;">
-								<div class="fw-bold text-truncate">${songName}</div>
-								<small class="text-muted text-truncate">${singer} ${album ? '- ' + album : ''}</small>
-							</div>
-						</div>
-						<div class="d-flex align-items-center flex-shrink-0">
-							<small class="text-muted me-3">${duration}</small>
-							<button class="btn btn-sm btn-primary add-song-btn">
-								<i class="fa fa-plus"></i>
-							</button>
+			if (isNetease) {
+				// 网易云音乐格式：后端已经将 singers 数组转换为 singer 字符串
+				singer = song.singer || '未知歌手';
+			} else {
+				// QQ音乐格式：singer 是数组
+				singer = (song.singer || []).map(s => s.name).join(', ') || '未知歌手';
+			}
+
+			const album = song.albumname || song.album?.name || song.albumName || '';
+			const songId = song.songmid || song.id;
+			const albummid = song.albummid || song.album?.id || '';
+			const duration = song.interval ? State.formatTime(song.interval) : (song.duration ? State.formatTime(song.duration / 1000) : '');
+			const coverUrl = song.cover || (albummid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albummid}.jpg` : defaultCover);
+
+			// 显示来源徽章
+			const sourceBadge = isNetease ?
+				'<span class="badge bg-secondary ms-2" style="font-size: 10px;">网易云</span>' :
+				'<span class="badge bg-primary ms-2" style="font-size: 10px;">QQ</span>';
+
+			html += `
+				<div class="list-group-item d-flex justify-content-between align-items-center" data-songid="${songId}" data-source="${song.source || 'qq'}" data-songname="${songName}" data-singer="${singer}" data-cover="${coverUrl}" data-album="${album}">
+					<div class="d-flex align-items-center" style="flex: 1; min-width: 0;">
+						<img src="${coverUrl}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 12px; flex-shrink: 0;" alt="${songName}" onerror="this.onerror=null; this.src='${defaultCover}';">
+						<div style="flex: 1; min-width: 0; overflow: hidden;">
+							<div class="fw-bold text-truncate">${songName}${sourceBadge}</div>
+							<small class="text-muted text-truncate">${singer} ${album ? '- ' + album : ''}</small>
 						</div>
 					</div>
-				`;
-			}
+					<div class="d-flex align-items-center flex-shrink-0">
+						<small class="text-muted me-3">${duration}</small>
+						<button class="btn btn-sm btn-primary add-song-btn">
+							<i class="fa fa-plus"></i>
+						</button>
+					</div>
+				</div>
+			`;
 		}
+	}
 
 		container.html(html);
 

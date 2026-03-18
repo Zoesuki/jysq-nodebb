@@ -13,6 +13,8 @@ Search.searchSource = 'qq'; // qq, netease
 Search.isSearchingPlaylistDetail = false;
 // 当前搜索的歌单ID（仅用于歌单详情搜索）
 Search.currentPlaylistId = null;
+// 当前搜索的歌单来源（仅用于歌单详情搜索）
+Search.currentPlaylistSource = null;
 // 缓存的歌单所有歌曲（用于前端分页）
 Search.cachedPlaylistSongs = null;
 
@@ -46,19 +48,34 @@ Search.cachedPlaylistSongs = null;
 				'qq': 'QQ音乐',
 				'netease': '网易云音乐'
 			};
+			// 根据来源和类型选择不同的显示名称
 			const typeNames = {
-				'song': '歌曲',
-				'playlist': '收藏歌单',
-				'user-playlist': '自建歌单'
+				'qq': {
+					'song': '歌曲',
+					'playlist': '收藏歌单',
+					'user-playlist': '自建歌单'
+				},
+				'netease': {
+					'song': '歌曲',
+					'playlist': '所有歌单',
+					'user-playlist': '用户歌单'
+				}
 			};
-			$('#current-search-type').text(`${sourceNames[source] || ''} ${typeNames[type] || ''}`);
+			const typeName = typeNames[source]?.[type] || type;
+			$('#current-search-type').text(`${sourceNames[source] || ''} ${typeName}`);
 
 			// 更新占位符文本
 			let placeholder = '';
 			if (type === 'playlist' || type === 'user-playlist') {
-				placeholder = `搜索${sourceNames[source] || ''}${typeNames[type] || ''}(QQ号)...`;
+				if (source === 'netease' && type === 'user-playlist') {
+					placeholder = `输入网易云音乐用户ID...`;
+				} else if (source === 'netease' && type === 'playlist') {
+					placeholder = `搜索网易云音乐${typeName}...`;
+				} else {
+					placeholder = `搜索${sourceNames[source] || ''}${typeName}(QQ号)...`;
+				}
 			} else {
-				placeholder = `搜索${sourceNames[source] || ''}${typeNames[type] || ''}...`;
+				placeholder = `搜索${sourceNames[source] || ''}${typeName}...`;
 			}
 			$('#music-search-input').attr('placeholder', placeholder);
 
@@ -151,13 +168,41 @@ Search.cachedPlaylistSongs = null;
 		try {
 			let apiUrl, searchParams;
 
-			// 根据搜索类型构建请求参数
+			// 根据搜索类型和来源构建请求参数
 			if (Search.isSearchingPlaylistDetail) {
-				// 搜索歌单详情，使用当前歌单ID
-				apiUrl = `/api/music/playlist/${Search.currentPlaylistId}`;
+				// 搜索歌单详情，使用当前歌单ID和来源
+				const playlistSource = Search.currentPlaylistSource || 'qq';
+				if (playlistSource === 'netease') {
+					apiUrl = `/api/music/netease/playlist/detail?id=${Search.currentPlaylistId}`;
+				} else {
+					apiUrl = `/api/music/playlist/${Search.currentPlaylistId}`;
+				}
 				searchParams = {};
+			} else if (Search.searchSource === 'netease') {
+				// 网易云音乐搜索
+				if (Search.searchType === 'user-playlist') {
+					// 网易云用户歌单 - 需要用户ID
+					const uid = State.searchKeyword.trim();
+					if (!uid || isNaN(uid)) {
+						alerts.alert({
+							title: '提示',
+							message: '请输入正确的网易云音乐用户ID',
+							type: 'info',
+							timeout: 3000,
+						});
+						return;
+					}
+					apiUrl = `/api/music/netease/user/playlist?uid=${uid}&limit=10&offset=${(State.searchPageNo - 1) * 10}`;
+				} else if (Search.searchType === 'playlist') {
+					// 网易云搜索歌单
+					const type = '1000';
+					apiUrl = `/api/music/netease/search?keywords=${encodeURIComponent(State.searchKeyword)}&type=${type}&limit=10&offset=${(State.searchPageNo - 1) * 10}`;
+				} else {
+					// 网易云搜索歌曲
+					apiUrl = `/api/music/netease/search?keywords=${encodeURIComponent(State.searchKeyword)}&type=1&limit=10&offset=${(State.searchPageNo - 1) * 10}`;
+				}
 			} else if (Search.searchType === 'playlist') {
-				// 搜索收藏歌单列表
+				// QQ音乐搜索收藏歌单列表
 				searchParams = {
 					key: State.searchKeyword,
 					pageNo: State.searchPageNo,
@@ -165,7 +210,7 @@ Search.cachedPlaylistSongs = null;
 				};
 				apiUrl = '/api/music/search/playlist';
 			} else if (Search.searchType === 'user-playlist') {
-				// 搜索自建歌单列表
+				// QQ音乐搜索自建歌单列表
 				searchParams = {
 					key: State.searchKeyword,
 					pageNo: State.searchPageNo,
@@ -173,7 +218,7 @@ Search.cachedPlaylistSongs = null;
 				};
 				apiUrl = '/api/music/search/user-playlist';
 			} else {
-				// 搜索歌曲
+				// QQ音乐搜索歌曲
 				searchParams = {
 					key: State.searchKeyword,
 					pageNo: State.searchPageNo,
@@ -191,15 +236,15 @@ Search.cachedPlaylistSongs = null;
 
 			// 构建fetch请求
 			const fetchOptions = {
-				method: Search.isSearchingPlaylistDetail ? 'GET' : 'POST',
-				headers: Search.isSearchingPlaylistDetail ? {} : {
+				method: (Search.searchSource === 'netease' || Search.isSearchingPlaylistDetail) ? 'GET' : 'POST',
+				headers: (Search.searchSource === 'netease' || Search.isSearchingPlaylistDetail) ? {} : {
 					'Content-Type': 'application/json',
 				},
 				credentials: 'include',
 			};
 
 			// 只有搜索和搜索歌单列表时才添加body
-			if (!Search.isSearchingPlaylistDetail) {
+			if (Search.searchSource !== 'netease' && !Search.isSearchingPlaylistDetail) {
 				fetchOptions.body = JSON.stringify(searchParams);
 			}
 
@@ -210,7 +255,48 @@ Search.cachedPlaylistSongs = null;
 
 			console.log('[Search] Response data:', data);
 
-			// 歌单详情使用 songlist 字段，其他搜索使用 list 字段
+			// 网易云音乐搜索结果已经通过后端适配,直接使用
+			if (Search.searchSource === 'netease') {
+				// 网易云音乐的列表字段已经是 list,直接获取
+				const items = data.data?.list || [];
+
+				if (!data.data || items.length === 0) {
+					console.log('[Search] NetEase search returned empty results');
+					$('#search-results-container').css({
+						'visibility': 'hidden',
+						'opacity': '0'
+					});
+
+					if (!isPageChange) {
+						alerts.alert({
+							title: '提示',
+							message: '未找到相关歌曲',
+							type: 'info',
+							timeout: 3000,
+						});
+					}
+					return;
+				}
+
+				console.log('[Search] NetEase search found', items.length, 'songs');
+
+				// 计算总页数
+				const total = data.data.total || items.length;
+				State.searchTotalPages = Math.ceil(total / 10);
+
+				// 保存搜索历史（只在首次搜索时保存）
+				if (!isPageChange) {
+					Search.saveSearchHistory(State.searchKeyword);
+				}
+
+				UI.updatePaginationUI();
+				UI.showSearchResults(items, Search.searchType);
+				console.log('[Search] UI.showSearchResults completed for NetEase');
+				return;
+			}
+
+			// QQ音乐和其他搜索处理
+			// 歌单详情使用 songlist 字段,其他搜索使用 list 字段
 			const listField = Search.isSearchingPlaylistDetail ? 'songlist' : 'list';
 			const items = data.data[listField];
 
@@ -221,24 +307,38 @@ Search.cachedPlaylistSongs = null;
 					'opacity': '0'
 				});
 
-				// 只有在不是分页切换时才提示
-				if (!isPageChange) {
-					const sourceNames = {
-						'qq': 'QQ音乐',
-						'netease': '网易云音乐'
-					};
-					const typeNames = {
-						'song': '歌曲',
-						'playlist': '收藏歌单',
-						'user-playlist': '自建歌单'
-					};
+					// 只有在不是分页切换时才提示
+					if (!isPageChange) {
+						const sourceNames = {
+							'qq': 'QQ音乐',
+							'netease': '网易云音乐'
+						};
+						const typeNames = {
+							'qq': {
+								'song': '歌曲',
+								'playlist': '收藏歌单',
+								'user-playlist': '自建歌单'
+							},
+							'netease': {
+								'song': '歌曲',
+								'playlist': '所有歌单',
+								'user-playlist': '用户歌单'
+							}
+						};
+						const typeName = typeNames[Search.searchSource]?.[Search.searchType] || Search.searchType;
 
-					let message = '';
-					if (Search.searchSource === 'netease') {
-						message = `网易云音乐${typeNames[Search.searchType]}搜索功能开发中，敬请期待`;
-					} else {
-						message = `在${sourceNames[Search.searchSource]}中未找到相关${typeNames[Search.searchType]}`;
-					}
+						let message = '';
+						if (Search.searchSource === 'netease') {
+							if (Search.searchType === 'user-playlist') {
+								message = `未找到该用户的歌单，请确认用户ID是否正确`;
+							} else if (Search.searchType === 'playlist') {
+								message = `未找到相关所有歌单`;
+							} else {
+								message = `网易云音乐${typeName}搜索功能开发中,敬请期待`;
+							}
+						} else {
+							message = `在${sourceNames[Search.searchSource]}中未找到相关${typeName}`;
+						}
 
 					alerts.alert({
 						title: '提示',
@@ -257,6 +357,14 @@ Search.cachedPlaylistSongs = null;
 			State.searchTotalPages = Math.ceil(total / 10);
 
 			let displayItems = items;
+
+			// 为网易云音乐的歌曲添加 source 字段
+			if (Search.searchSource === 'netease') {
+				displayItems = items.map(item => ({
+					...item,
+					source: 'netease'
+				}));
+			}
 
 			// 如果是歌单详情，进行前端分页
 			if (Search.isSearchingPlaylistDetail) {
@@ -479,11 +587,13 @@ Search.cachedPlaylistSongs = null;
 			const item = $(this).closest('.list-group-item');
 			const playlistId = item.data('playlist-id');
 			const playlistName = item.data('playlist-name');
+			const playlistSource = item.data('source') || 'qq';
 
-			console.log('[Search] Playlist detail button clicked, playlistId:', playlistId);
+			console.log('[Search] Playlist detail button clicked, playlistId:', playlistId, 'source:', playlistSource);
 
-			// 保存歌单ID到单独的变量
+			// 保存歌单ID和来源到单独的变量
 			Search.currentPlaylistId = playlistId;
+			Search.currentPlaylistSource = playlistSource; // 保存歌单来源
 			// 标记正在搜索歌单详情
 			Search.isSearchingPlaylistDetail = true;
 
@@ -496,34 +606,89 @@ Search.cachedPlaylistSongs = null;
 
 		$('#search-results').on('click', '.add-song-btn', async function() {
 			const item = $(this).closest('.list-group-item');
-			const songmid = item.data('songmid');
+			const songId = item.data('songid');
+			const source = item.data('source') || 'qq';
 			const songName = item.data('songname');
 			const singer = item.data('singer');
 			const coverUrl = item.data('cover');
 
 			try {
-				const response = await fetch(`/api/music/song/url/${songmid}`, {
+				let track;
+				let apiUrl;
+
+				// 对于网易云音乐，先检查音乐是否可用
+				if (source === 'netease') {
+					const checkUrl = `/api/music/netease/check/music?id=${songId}`;
+					const checkResponse = await fetch(checkUrl, {
+						credentials: 'include',
+					});
+					const checkData = await checkResponse.json();
+
+					if (!checkData.success) {
+						// 音乐不可用，显示提示
+						alerts.alert({
+							title: '无法播放',
+							message: checkData.message || '该歌曲暂无版权，无法播放',
+							type: 'warning',
+							timeout: 3000,
+						});
+						return;
+					}
+				}
+
+				// 统一构建 API URL
+				if (source === 'netease') {
+					apiUrl = `/api/music/netease/song/url?id=${songId}`;
+				} else {
+					apiUrl = `/api/music/song/url/${songId}`;
+				}
+
+				// 统一获取播放链接
+				const response = await fetch(apiUrl, {
 					credentials: 'include',
 				});
 				const data = await response.json();
 
-				if (data.result !== 100 || !data.data || !data.data[songmid]) {
-					alerts.alert({
-						title: '错误',
-						message: '获取播放链接失败',
-						type: 'error',
-						timeout: 3000,
-					});
-					return;
+				// 统一处理响应数据
+				if (source === 'netease') {
+					// 网易云格式: { data: [{ url: xxx }] }
+					if (!data.data || !data.data.length || !data.data[0].url) {
+						alerts.alert({
+							title: '错误',
+							message: '获取网易云音乐播放链接失败',
+							type: 'error',
+							timeout: 3000,
+						});
+						return;
+					}
+					track = {
+						id: songId,
+						name: songName,
+						artist: singer,
+						cover: coverUrl,
+						url: data.data[0].url,
+						source: 'netease',
+					};
+				} else {
+					// QQ音乐格式: { data: { songId: url } }
+					if (data.result !== 100 || !data.data || !data.data[songId]) {
+						alerts.alert({
+							title: '错误',
+							message: '获取QQ音乐播放链接失败',
+							type: 'error',
+							timeout: 3000,
+						});
+						return;
+					}
+					track = {
+						id: songId,
+						name: songName,
+						artist: singer,
+						cover: coverUrl,
+						url: data.data[songId],
+						source: 'qq',
+					};
 				}
-
-				const track = {
-					id: songmid,
-					name: songName,
-					artist: singer,
-					cover: coverUrl,
-					url: data.data[songmid],
-				};
 
 				const addResponse = await socket.emit('modules.music.addToPlaylist', { roomId: State.currentRoomId, track: track });
 				if (addResponse && addResponse.alreadyExists) {

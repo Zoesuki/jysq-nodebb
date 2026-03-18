@@ -133,6 +133,22 @@ define('music', [
 				console.warn('[Music] Failed to set QQMusic cookie:', err);
 			}
 
+			// 获取网易云音乐cookie
+			try {
+				const response = await fetch('/api/music/netease/cookie', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+					},
+					credentials: 'include',
+				});
+				if (response.ok) {
+					console.log('[Music] NetEase cookie set successfully');
+				}
+			} catch (err) {
+				console.warn('[Music] Failed to set NetEase cookie:', err);
+			}
+
 			const response = await socket.emit('modules.music.joinRoom', { roomId: roomId });
 			State.isHost = response.room.isHost;
 			State.currentRoomId = roomId;

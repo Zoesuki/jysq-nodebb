@@ -7,11 +7,20 @@ define('music/lyrics', [
 	// 获取歌词
 	Lyrics.fetchLyrics = async function (songId) {
 		try {
-			const response = await fetch(`/api/music/lyric/${songId}`, {
+			// 检查是否是网易云音乐的歌曲ID（网易云音乐通常是数字，QQ音乐有字符）
+			let apiUrl = `/api/music/lyric/${songId}`;
+
+			// 如果当前播放的是网易云音乐歌曲，使用网易云歌词接口
+			if (State.currentTrack && State.currentTrack.source === 'netease') {
+				apiUrl = `/api/music/netease/lyric?id=${songId}`;
+			}
+
+			const response = await fetch(apiUrl, {
 				credentials: 'include',
 			});
 			const data = await response.json();
 
+			// QQ音乐返回格式
 			if (data.result === 100 && data.data && data.data.lyric) {
 				// 如果有翻译（trans），使用双语歌词
 				if (data.data.trans) {
@@ -19,6 +28,12 @@ define('music/lyrics', [
 				} else {
 					Lyrics.parseLyrics(data.data.lyric);
 				}
+			}
+			// 网易云音乐返回格式
+			else if (data.lrc && data.lrc.lyric) {
+				// 网易的翻译在 tlyric 字段
+				const transText = data.tlyric ? data.tlyric.lyric : null;
+				Lyrics.parseLyrics(data.lrc.lyric, transText);
 			} else {
 				$('#lyrics-container').html(`
 					<div class="text-muted">
@@ -43,10 +58,13 @@ define('music/lyrics', [
 			return;
 		}
 
+		console.log('[Lyrics] 开始解析歌词, transText:', transText ? '有翻译' : '无翻译');
+
 		const lines = lrcText.split('\n');
 		const transLines = transText ? transText.split('\n') : null;
 		State.lyricsLines = [];
 
+		// 先解析原文歌词,建立一个时间戳到文本的映射
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i];
 			// 支持两种时间格式：[mm:ss.xxx] 和 [mm:ss:xxx]
@@ -58,19 +76,45 @@ define('music/lyrics', [
 				const time = minutes * 60 + seconds + milliseconds / 1000;
 				const text = match[4].trim();
 
-				// 如果有翻译，解析对应的翻译行
-				let trans = null;
-				if (transLines && i < transLines.length) {
-					const transMatch = transLines[i].match(/\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);
-					if (transMatch) {
-						trans = transMatch[4].trim();
-					}
-				}
-
 				if (text) {
-					State.lyricsLines.push({ time, text, trans });
+					State.lyricsLines.push({ time, text, trans: null });
 				}
 			}
+		}
+
+		console.log('[Lyrics] 解析原文歌词完成, 共', State.lyricsLines.length, '行');
+
+		// 如果有翻译,通过时间戳匹配翻译行
+		if (transLines && State.lyricsLines.length > 0) {
+			console.log('[Lyrics] 开始解析翻译歌词...');
+			// 构建翻译的时间戳映射
+			const transMap = new Map();
+			for (let i = 0; i < transLines.length; i++) {
+				const line = transLines[i];
+				const match = line.match(/\[(\d{2}):(\d{2})[:.](\d{2,3})\](.*)/);
+				if (match) {
+					const minutes = parseInt(match[1]);
+					const seconds = parseInt(match[2]);
+					const milliseconds = parseInt(match[3]);
+					const time = minutes * 60 + seconds + milliseconds / 1000;
+					const text = match[4].trim();
+					if (text) {
+						transMap.set(time, text);
+					}
+				}
+			}
+
+			console.log('[Lyrics] 解析翻译完成, 共', transMap.size, '条');
+
+			// 将翻译文本匹配到原文歌词
+			let matchedCount = 0;
+			State.lyricsLines.forEach(lyric => {
+				if (transMap.has(lyric.time)) {
+					lyric.trans = transMap.get(lyric.time);
+					matchedCount++;
+				}
+			});
+			console.log('[Lyrics] 成功匹配', matchedCount, '条翻译');
 		}
 
 		Lyrics.displayLyrics();

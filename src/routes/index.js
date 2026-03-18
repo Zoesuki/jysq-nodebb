@@ -56,6 +56,18 @@ _mounts.main = (app, middleware, controllers) => {
 	app.get('/api/music/song/url/:id', controllers.music.getSongUrl);
 	app.get('/api/music/lyric/:id', controllers.music.getLyrics);
 	app.get('/api/music/playlist/:id', controllers.music.getPlaylist);
+
+	// 网易云音乐Cookie路由
+	app.get('/api/music/netease/cookie', controllers.music.getNeteaseCookie);
+	app.post('/api/music/netease/cookie', controllers.music.setNeteaseCookie);
+
+	// 网易云音乐API代理路由
+	app.get('/api/music/netease/search', controllers.music.neteaseSearch);
+	app.get('/api/music/netease/playlist/detail', controllers.music.neteasePlaylistDetail);
+	app.get('/api/music/netease/song/url', controllers.music.neteaseSongUrl);
+	app.get('/api/music/netease/lyric', controllers.music.neteaseLyric);
+	app.get('/api/music/netease/user/playlist', controllers.music.neteaseUserPlaylist);
+	app.get('/api/music/netease/check/music', controllers.music.neteaseCheckMusic);
 };
 
 _mounts.mod = (app, middleware, controllers) => {
