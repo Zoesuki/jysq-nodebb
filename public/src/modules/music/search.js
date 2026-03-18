@@ -86,23 +86,21 @@ Search.cachedPlaylistSongs = null;
 			const $resultsContainer = $('#search-results-container');
 			const $target = $(e.target);
 
-			// 检查点击是否在搜索结果容器内
-			const isInResultsContainer = $resultsContainer.is($target) || $resultsContainer.has($target).length > 0;
+			// 检查点击是否在搜索容器内部
+			const isInSearchContainer = $container.is($target) || $container.has($target).length > 0;
 
-			// 如果点击的不是搜索容器内部，则关闭搜索结果和下拉菜单
-			if (!$container.is($target) && $container.has($target).length === 0) {
-				$('#search-results-container').css({
-					'visibility': 'hidden',
-					'opacity': '0'
-				});
-				$('#search-type-btn').removeClass('show');
-				$('.search-dropdown-menu').removeClass('show');
+			// 如果点击的是搜索容器内部，不做处理
+			if (isInSearchContainer) {
+				return;
 			}
-			// 如果点击的是搜索容器内部，但在搜索结果容器外部，只关闭下拉菜单
-			else if (!isInResultsContainer) {
-				$('#search-type-btn').removeClass('show');
-				$('.search-dropdown-menu').removeClass('show');
-			}
+
+			// 点击外部，关闭所有
+			$('#search-results-container').css({
+				'visibility': 'hidden',
+				'opacity': '0'
+			});
+			$('#search-type-btn').removeClass('show');
+			$('.search-dropdown-menu').removeClass('show');
 		});
 	};
 

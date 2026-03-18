@@ -93,7 +93,7 @@ MusicController.search = async function (req, res, next) {
 	const { key, t = '0', pageNo = 1, pageSize = 20, type = 'song', source = 'qq' } = req.body;
 
 	try {
-		console.log('[Music Controller] Search request:', { key, type, source, pageNo });
+		// console.log('[Music Controller] Search request:', { key, type, source, pageNo });
 
 		// 根据来源和类型选择不同的API端点
 		let apiUrl = '';
@@ -117,7 +117,7 @@ MusicController.search = async function (req, res, next) {
 		} else if (source === 'netease') {
 			// 网易云音乐搜索
 			// 这里需要对接网易云API，暂时返回空结果
-			console.log('[Music Controller] NetEase search requested, but not yet implemented');
+			// console.log('[Music Controller] NetEase search requested, but not yet implemented');
 
 			return res.json({
 				result: 100,
@@ -151,7 +151,7 @@ MusicController.search = async function (req, res, next) {
 		});
 
 		const data = await response.json();
-		console.log('[Music Controller] Search response:', data);
+		// console.log('[Music Controller] Search response:', data);
 
 		res.json(data);
 	} catch (err) {

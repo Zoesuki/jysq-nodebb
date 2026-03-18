@@ -15,31 +15,15 @@
 <!-- 内容容器 -->
 <div class="music-room-wrapper">
 	<div class="row g-0">
-	<div class="h-100 {{{if widgets.sidebar.length }}}col-lg-9 col-sm-12{{{ else }}}col-lg-12{{{ end }}}">
+	<div class="h-100 col-lg-12 col-sm-12">
+		<!-- 隐藏的侧边栏占位符，防止 NodeBB 自动包装内容 -->
+		<div data-widget-area="sidebar" class="hidden"></div>
+
 		<!-- 隐藏的音频元素 -->
 		<audio id="audio-player" style="display: none;"></audio>
 
 		<!-- 歌词样式 -->
 		<style>
-
-			#content > .container,
-			#content > .container-fluid {
-				margin: 0 !important;
-				padding: 0 !important;
-				max-width: 100% !important;
-			}
-
-			#panel {
-				margin: 0 !important;
-				padding: 0 !important;
-			}
-
-			#panel > .container,
-			#panel > .container-fluid {
-				margin: 0 !important;
-				padding: 0 !important;
-			}
-
 			/* 全屏背景层 */
 			.music-room-bg {
 				position: fixed;

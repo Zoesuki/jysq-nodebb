@@ -728,7 +728,17 @@ Music.getRoomUsersList = async function (roomId) {
 	const user = require('../user');
 	const usersData = await Promise.all(uniqueUids.map(async (uid) => {
 		try {
-			const userData = await user.getUserFields(uid, ['username', 'picture', 'uid']);
+			let userData;
+			if (uid > 0) {
+				userData = await user.getUserFields(uid, ['username', 'picture', 'uid']);
+			} else {
+				// 未登录用户使用默认值
+				userData = {
+					username: '纯路人',
+					uid: 0,
+					picture: '/assets/uploads/system/avatar-default.jpeg'
+				};
+			}
 			return {
 				uid: userData.uid,
 				username: userData.username,
@@ -739,7 +749,7 @@ Music.getRoomUsersList = async function (roomId) {
 			console.error(`Failed to get user data for uid ${uid}:`, err);
 			return {
 				uid: uid,
-				username: 'Unknown',
+				username: '纯路人',
 				picture: '/assets/uploads/system/avatar-default.jpeg',
 				isHost: uid === room.hostId
 			};
@@ -831,7 +841,17 @@ Music.sendChat = async function (socket, data) {
 
 	// 获取发送者信息
 	const user = require('../user');
-	const userData = await user.getUserFields(socket.uid, ['username', 'picture', 'uid']);
+	let userData;
+	if (socket.uid > 0) {
+		userData = await user.getUserFields(socket.uid, ['username', 'picture', 'uid']);
+	} else {
+		// 未登录用户使用默认值
+		userData = {
+			username: '访客',
+			uid: 0,
+			picture: '/assets/uploads/system/avatar-default.jpeg'
+		};
+	}
 
 	// 构建消息对象
 	const message = {
