@@ -256,9 +256,10 @@ Search.cachedPlaylistSongs = null;
 			console.log('[Search] Response data:', data);
 
 			// 网易云音乐搜索结果已经通过后端适配,直接使用
-			if (Search.searchSource === 'netease') {
-				// 网易云音乐的列表字段已经是 list,直接获取
-				const items = data.data?.list || [];
+			if (Search.searchSource === 'netease' || Search.isSearchingPlaylistDetail) {
+				// 网易云音乐的歌单详情使用 songlist 字段,其他搜索使用 list 字段
+				const listField = Search.isSearchingPlaylistDetail ? 'songlist' : 'list';
+				const items = data.data?.[listField] || [];
 
 				if (!data.data || items.length === 0) {
 					console.log('[Search] NetEase search returned empty results');
@@ -284,13 +285,27 @@ Search.cachedPlaylistSongs = null;
 				const total = data.data.total || items.length;
 				State.searchTotalPages = Math.ceil(total / 10);
 
-				// 保存搜索历史（只在首次搜索时保存）
-				if (!isPageChange) {
+				let displayItems = items;
+
+				// 如果是歌单详情,进行前端分页
+				if (Search.isSearchingPlaylistDetail) {
+					// 缓存所有歌曲
+					Search.cachedPlaylistSongs = items;
+
+					// 根据当前页码截取需要显示的歌曲
+					const startIndex = (State.searchPageNo - 1) * 10;
+					const endIndex = startIndex + 10;
+					displayItems = items.slice(startIndex, endIndex);
+					console.log('[Search] Paginated playlist songs:', displayItems.length, 'of', items.length, 'total songs, page', State.searchPageNo);
+				}
+
+				// 保存搜索历史(只在首次搜索时保存)
+				if (!isPageChange && !Search.isSearchingPlaylistDetail) {
 					Search.saveSearchHistory(State.searchKeyword);
 				}
 
 				UI.updatePaginationUI();
-				UI.showSearchResults(items, Search.searchType);
+				UI.showSearchResults(displayItems, Search.isSearchingPlaylistDetail ? 'playlist_detail' : Search.searchType);
 				console.log('[Search] UI.showSearchResults completed for NetEase');
 				return;
 			}
@@ -581,6 +596,56 @@ Search.cachedPlaylistSongs = null;
 		$('#search-results').off('click', '.add-song-btn');
 		$('#playlist').off('click', '.remove-track-btn');
 		$('#search-results').off('click', '.search-playlist-detail-btn');
+		$('#search-results').off('click', '.add-all-songs-btn');
+		$('#search-results').off('click', '.add-all-songs-from-playlist-btn');
+
+		// 从歌单列表直接添加全部歌曲
+		$('#search-results').on('click', '.add-all-songs-from-playlist-btn', async function() {
+			const item = $(this).closest('.list-group-item');
+			const playlistId = item.data('playlist-id');
+			const playlistName = item.data('playlist-name');
+			const playlistSource = item.data('source') || 'qq';
+
+			console.log('[Search] Add all songs from playlist clicked, playlistId:', playlistId, 'source:', playlistSource);
+
+			try {
+				let apiUrl;
+				if (playlistSource === 'netease') {
+					apiUrl = `/api/music/netease/playlist/detail?id=${playlistId}`;
+				} else {
+					apiUrl = `/api/music/playlist/${playlistId}`;
+				}
+
+				const response = await fetch(apiUrl, {
+					credentials: 'include',
+				});
+				const data = await response.json();
+
+				// 获取歌曲列表
+				const songs = data.data?.songlist || [];
+
+				if (songs.length === 0) {
+					alerts.alert({
+						title: '提示',
+						message: '该歌单暂无歌曲',
+						type: 'info',
+						timeout: 3000,
+					});
+					return;
+				}
+
+				// 批量添加歌曲
+				await Search.addAllSongsToPlaylist(songs);
+			} catch (err) {
+				console.error('[Search] Failed to add all songs from playlist:', err);
+				alerts.alert({
+					title: '错误',
+					message: '获取歌单歌曲失败,请重试',
+					type: 'error',
+					timeout: 3000,
+				});
+			}
+		});
 
 		// 歌单详情按钮点击事件
 		$('#search-results').on('click', '.search-playlist-detail-btn', async function() {
@@ -597,11 +662,25 @@ Search.cachedPlaylistSongs = null;
 			// 标记正在搜索歌单详情
 			Search.isSearchingPlaylistDetail = true;
 
-			// 更新搜索框显示为歌单名称
-			$('#music-search-input').val(playlistName);
-
 			// 执行搜索
 			await Search.searchMusic(false);
+		});
+
+		// 添加全部按钮点击事件
+		$('#search-results').on('click', '.add-all-songs-btn', async function() {
+			const songs = Search.cachedPlaylistSongs || [];
+			if (songs.length === 0) {
+				alerts.alert({
+					title: '提示',
+					message: '没有可添加的歌曲',
+					type: 'info',
+					timeout: 3000,
+				});
+				return;
+			}
+
+			// 添加所有歌曲(不获取url,播放时再加载)
+			Search.addAllSongsToPlaylist(songs);
 		});
 
 		$('#search-results').on('click', '.add-song-btn', async function() {
@@ -710,6 +789,86 @@ Search.cachedPlaylistSongs = null;
 				});
 			}
 		});
+	};
+
+	// 批量添加歌曲到播放列表(播放时才加载url)
+	Search.addAllSongsToPlaylist = async function(songs) {
+		const total = songs.length;
+		let successCount = 0;
+		let alreadyExistsCount = 0;
+
+		// 显示进度提示
+		alerts.alert({
+			title: '添加中',
+			message: `正在添加 ${total} 首歌曲...`,
+			type: 'info',
+			timeout: 0,
+		});
+
+		try {
+			for (const song of songs) {
+				try {
+					const songId = song.songmid || song.id;
+					const source = song.source || 'qq';
+					const songName = song.songname || song.title || song.name || '未知歌曲';
+					let singer = '';
+
+					// 解析歌手信息
+					if (source === 'netease') {
+						singer = song.singer || '未知歌手';
+					} else {
+						singer = (song.singer || []).map(s => s.name).join(', ') || '未知歌手';
+					}
+
+					const coverUrl = song.cover || '/assets/images/music-cover.png';
+
+					// 构建track对象(不包含url,播放时再获取)
+					const track = {
+						id: songId,
+						name: songName,
+						artist: singer,
+						cover: coverUrl,
+						source: source,
+						url: '' // url在播放时动态获取
+					};
+
+					// 添加到播放列表
+					const addResponse = await socket.emit('modules.music.addToPlaylist', {
+						roomId: State.currentRoomId,
+						track: track
+					});
+
+					if (addResponse && addResponse.alreadyExists) {
+						alreadyExistsCount++;
+					} else {
+						successCount++;
+					}
+				} catch (err) {
+					console.error('[Search] Add song failed:', err);
+				}
+			}
+
+			// 显示结果
+			let message = `成功添加 ${successCount} 首歌曲`;
+			if (alreadyExistsCount > 0) {
+				message += `\n${alreadyExistsCount} 首歌曲已在播放列表中`;
+			}
+
+			alerts.alert({
+				title: '添加完成',
+				message: message,
+				type: 'success',
+				timeout: 3000,
+			});
+		} catch (err) {
+			console.error('[Search] Add all songs failed:', err);
+			alerts.alert({
+				title: '错误',
+				message: '批量添加失败,请重试',
+				type: 'error',
+				timeout: 3000,
+			});
+		}
 	};
 
 	return Search;

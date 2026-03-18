@@ -348,14 +348,17 @@ define('music/ui', [
 							</div>
 						</div>
 						<div class="d-flex align-items-center flex-shrink-0">
-							<button class="btn btn-sm btn-outline-primary search-playlist-detail-btn" style="margin-right: 8px;">
+							<button class="btn btn-sm btn-success add-all-songs-from-playlist-btn" style="margin-right: 8px;" title="添加全部歌曲">
+								<i class="fa fa-plus"></i>
+							</button>
+							<button class="btn btn-sm btn-outline-primary search-playlist-detail-btn">
 								<i class="fa fa-list"></i>
 							</button>
 						</div>
 					</div>
 				`;
 			}
-		} else if (type === 'user-playlist') {
+	} else if (type === 'user-playlist') {
 			// 显示自建歌单列表
 			for (const playlist of items) {
 				// 检查是否是网易云音乐歌单
@@ -392,7 +395,10 @@ define('music/ui', [
 							</div>
 						</div>
 						<div class="d-flex align-items-center flex-shrink-0">
-							<button class="btn btn-sm btn-outline-primary search-playlist-detail-btn" style="margin-right: 8px;">
+							<button class="btn btn-sm btn-success add-all-songs-from-playlist-btn" style="margin-right: 8px;" title="添加全部歌曲">
+								<i class="fa fa-plus"></i>
+							</button>
+							<button class="btn btn-sm btn-outline-primary search-playlist-detail-btn">
 								<i class="fa fa-list"></i>
 							</button>
 						</div>
@@ -400,7 +406,15 @@ define('music/ui', [
 				`;
 			}
 	} else {
-		// 显示歌曲搜索结果或歌单详情
+	// 歌单详情页面,添加控制栏(只显示歌曲数量)
+		const source = items[0]?.source || 'qq';
+		html += `
+			<div class="d-flex justify-content-between align-items-center mb-3 px-3 py-2 bg-light rounded">
+				<span class="text-muted small"><i class="fa fa-music me-1"></i>共 ${items.length} 首歌曲</span>
+			</div>
+		`;
+
+	// 显示歌曲搜索结果或歌单详情
 		for (const song of items) {
 			const isNetease = song.source === 'netease';
 			const songName = song.songname || song.title || song.name || '未知歌曲';

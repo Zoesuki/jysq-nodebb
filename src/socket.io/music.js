@@ -298,6 +298,60 @@ Music.doPlay = async function (roomId, track) {
 	const room = musicRooms.get(roomId);
 	if (!room) return;
 
+	// 如果歌曲没有播放链接,动态获取
+	if (!track.url && track.source) {
+		try {
+			let apiUrl;
+			if (track.source === 'netease') {
+				// 先检查网易云音乐版权
+				const checkResponse = await fetch(`http://localhost:3000/check/music?id=${track.id}`);
+				const checkData = await checkResponse.json();
+				if (!checkData.success) {
+					console.warn(`[Music] Song ${track.name} (${track.id}) is not available`);
+					// 跳过不可用的歌曲,直接播放下一首
+					await Music.playNext({ uid: room.hostId }, { roomId });
+					return;
+				}
+				apiUrl = `http://localhost:3000/song/url?id=${track.id}`;
+			} else {
+				apiUrl = `http://localhost:3000/song/url?id=${track.id}`;
+			}
+
+			const response = await fetch(apiUrl);
+			const data = await response.json();
+
+			// 更新 track 的 url
+			if (track.source === 'netease') {
+				if (data.data && data.data.length && data.data[0].url) {
+					track.url = data.data[0].url;
+					// 更新房间中该歌曲的 url
+					const playlistTrack = room.playlist.find(t => t.id === track.id);
+					if (playlistTrack) playlistTrack.url = track.url;
+				} else {
+					console.warn(`[Music] Failed to get URL for song ${track.name}`);
+					await Music.playNext({ uid: room.hostId }, { roomId });
+					return;
+				}
+			} else {
+				if (data.result === 100 && data.data && data.data[track.id]) {
+					track.url = data.data[track.id];
+					// 更新房间中该歌曲的 url
+					const playlistTrack = room.playlist.find(t => t.id === track.id);
+					if (playlistTrack) playlistTrack.url = track.url;
+				} else {
+					console.warn(`[Music] Failed to get URL for song ${track.name}`);
+					await Music.playNext({ uid: room.hostId }, { roomId });
+					return;
+				}
+			}
+		} catch (err) {
+			console.error(`[Music] Failed to load URL for song ${track.name}:`, err);
+			// 获取失败,跳过该歌曲
+			await Music.playNext({ uid: room.hostId }, { roomId });
+			return;
+		}
+	}
+
 	room.currentTrack = track;
 	room.isPlaying = true;
 	room.currentTime = 0;
@@ -516,9 +570,9 @@ Music.addToPlaylist = async function (socket, data) {
 	const userData = await user.getUserFields(socket.uid, ['username']);
 	track.addedBy = userData.username;
 
-	// 检查是否有播放 URL
-	if (!track.url) {
-		throw new Error('缺少播放链接');
+	// 检查是否有播放 URL(可以为空,播放时再加载)
+	if (!track.url && !track.source) {
+		throw new Error('缺少播放链接或来源');
 	}
 
 	// 添加歌曲到播放列表

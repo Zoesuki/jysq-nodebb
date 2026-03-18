@@ -489,17 +489,18 @@ MusicController.neteasePlaylistDetail = async function (req, res, next) {
 
 		const data = await response.json();
 
-		// 适配返回格式
+		// 网易云返回格式: { songs: [...], code: 200 }
+		// 需要转换为前端格式: { result: 100, data: { songlist: [...], total: N } }
 		if (data.songs && Array.isArray(data.songs)) {
-			// 将网易云格式转换为前端需要的格式
-			const adaptedSongs = data.songs.map(song => ({
+			// 将网易云的歌曲数据转换为前端需要的格式
+			const songlist = data.songs.map(song => ({
 				id: song.id,
 				name: song.name,
 				singer: song.ar?.map(artist => artist.name).join(', ') || '',
 				cover: song.al?.picUrl || '',
 				albumName: song.al?.name || '',
 				albumId: song.al?.id,
-				duration: song.dt, // 毫秒
+				duration: song.dt,
 				artists: song.ar || [],
 				source: 'netease'
 			}));
@@ -507,12 +508,19 @@ MusicController.neteasePlaylistDetail = async function (req, res, next) {
 			res.json({
 				result: 100,
 				data: {
-					songlist: adaptedSongs,
-					total: data.songs.length
+					songlist: songlist,
+					total: songlist.length
 				}
 			});
 		} else {
-			res.json(data);
+			// 如果没有歌曲数据,返回空列表
+			res.json({
+				result: 100,
+				data: {
+					songlist: [],
+					total: 0
+				}
+			});
 		}
 	} catch (err) {
 		console.error('Failed to get NetEase playlist detail:', err);
