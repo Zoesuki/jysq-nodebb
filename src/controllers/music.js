@@ -199,8 +199,8 @@ MusicController.getSongUrl = async function (req, res, next) {
 	try {
 		// 转发客户端的cookie到QQ音乐API
 		const cookies = req.headers.cookie;
-		console.log('[Music Controller] getSongUrl received cookies:', cookies);
-		console.log('[Music Controller] getSongUrl request headers:', Object.keys(req.headers));
+		// console.log('[Music Controller] getSongUrl received cookies:', cookies);
+		// console.log('[Music Controller] getSongUrl request headers:', Object.keys(req.headers));
 
 		const response = await fetch(`http://localhost:3300/song/urls?id=${id}&type=${type}`, {
 			headers: {
@@ -443,6 +443,24 @@ MusicController.neteaseSearch = async function (req, res, next) {
 					total: data.result.playlistCount || 0
 				}
 			});
+		} else if (data.result && data.result.userprofiles) {
+			// 用户搜索,适配格式
+			const adaptedList = data.result.userprofiles.map(user => ({
+				userId: user.userId || user.id || '',
+				nickname: user.nickname || user.name || '',
+				avatarUrl: user.avatarUrl || user.avatar || '',
+				signature: user.signature || user.description || '',
+				playlistCount: user.playlistCount || 0,
+				source: 'netease'
+			}));
+
+			res.json({
+				result: 100,
+				data: {
+					list: adaptedList,
+					total: data.result.userprofileCount || 0
+				}
+			});
 		} else if (data.result && (data.result.albums || data.result.artists)) {
 			// 专辑、歌手搜索，直接返回
 			res.json(data);
@@ -630,13 +648,35 @@ MusicController.neteaseUserPlaylist = async function (req, res, next) {
 
 		const data = await response.json();
 
-		// 适配返回格式为前端需要的格式
-		if (data.result === 100 && data.data && data.data.list) {
-			// 数据已经是正确格式,直接返回
-			res.json(data);
+		// 网易云返回格式: { more: true, playlist: [...] }
+		// 需要转换为前端格式: { result: 100, data: { list: [...], total: N } }
+		if (data.playlist && Array.isArray(data.playlist)) {
+			// 将网易云的歌单数据转换为前端需要的格式
+			const list = data.playlist.map(playlist => ({
+				id: playlist.id,
+				name: playlist.name,
+				cover: playlist.coverImgUrl || '',
+				creator: playlist.creator?.nickname || '',
+				trackCount: playlist.trackCount || 0,
+				source: 'netease'
+			}));
+
+			res.json({
+				result: 100,
+				data: {
+					list: list,
+					total: list.length
+				}
+			});
 		} else {
-			// 其他情况直接返回原始数据
-			res.json(data);
+			// 如果没有歌单数据,返回空列表
+			res.json({
+				result: 100,
+				data: {
+					list: [],
+					total: 0
+				}
+			});
 		}
 	} catch (err) {
 		console.error('Failed to get NetEase user playlist:', err);

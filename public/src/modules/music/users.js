@@ -34,6 +34,9 @@ define('music/users', [
 
 		let html = '';
 		for (const user of State.roomUsers) {
+			// 处理用户名,替换NodeBB语言键为中文(仅听歌房)
+			const displayName = user.username === '[[global:guest]]' ? '纯路人' : user.username;
+
 			let badges = '';
 			if (user.isHost) {
 				badges += '<span class="room-user-badge host">房主</span>';
@@ -45,11 +48,11 @@ define('music/users', [
 			html += `
 				<div class="room-user-item">
 					${user.picture ?
-						`<img src="${user.picture}" class="room-user-avatar" alt="${user.username}">` :
-						`<div class="room-user-avatar">${user.username.charAt(0).toUpperCase()}</div>`
+						`<img src="${user.picture}" class="room-user-avatar" alt="${displayName}">` :
+						`<div class="room-user-avatar">${displayName.charAt(0).toUpperCase()}</div>`
 					}
 					<div class="room-user-info">
-						<div class="room-user-name">${user.username}</div>
+						<div class="room-user-name">${displayName}</div>
 						${badges ? `<div class="room-user-badges">${badges}</div>` : ''}
 					</div>
 				</div>

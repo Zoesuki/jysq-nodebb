@@ -49,11 +49,14 @@ define('music/chat', ['music/state'], function (State) {
 		// 使用消息中的头像，如果没有则使用默认头像
 		const avatarUrl = message.picture || '/assets/uploads/system/avatar-default.jpeg';
 
+		// 处理用户名,替换NodeBB语言键为中文(仅听歌房)
+		const displayName = message.username === '[[global:guest]]' ? '纯路人' : message.username;
+
 		const time = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 		const html = `
 			<div class="chat-message ${isOwn ? 'own' : ''}">
 				<div class="message-header">
-					<span class="fw-bold me-1">${message.username}</span>
+					<span class="fw-bold me-1">${displayName}</span>
 					<span class="text-xs opacity-75">${time}</span>
 				</div>
 				<div class="d-flex align-items-start ${isOwn ? 'flex-row-reverse' : ''}">

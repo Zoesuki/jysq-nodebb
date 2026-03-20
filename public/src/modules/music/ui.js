@@ -311,7 +311,33 @@ define('music/ui', [
 
 		let html = '';
 
-		if (type === 'playlist') {
+		if (type === 'user') {
+			// 显示网易云用户列表
+			for (const user of items) {
+				const userId = user.userId || user.id || '';
+				const nickname = user.nickname || user.name || '未知用户';
+				const avatar = user.avatarUrl || user.avatar || defaultCover;
+				const signature = user.signature || user.description || '';
+				const playlistCount = user.playlistCount || user.playlistCount || 0;
+
+				html += `
+					<div class="list-group-item d-flex justify-content-between align-items-center" data-user-id="${userId}" data-user-name="${nickname}">
+						<div class="d-flex align-items-center" style="flex: 1; min-width: 0;">
+							<img src="${avatar}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 50%; margin-right: 12px; flex-shrink: 0;" alt="${nickname}" onerror="this.onerror=null; this.src='${defaultCover}';">
+							<div style="flex: 1; min-width: 0; overflow: hidden;">
+								<div class="fw-bold text-truncate">${nickname}</div>
+								<small class="text-muted text-truncate">${signature || '暂无简介'} · ${playlistCount} 个歌单</small>
+							</div>
+						</div>
+						<div class="d-flex align-items-center flex-shrink-0">
+							<button class="btn btn-sm btn-primary search-user-playlist-btn" title="查看该用户的歌单">
+								<i class="fa fa-list"></i>
+							</button>
+						</div>
+					</div>
+				`;
+			}
+		} else if (type === 'playlist') {
 			// 显示收藏歌单列表
 			for (const playlist of items) {
 				// 检查是否是网易云音乐歌单

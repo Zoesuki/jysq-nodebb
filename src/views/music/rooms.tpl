@@ -3,7 +3,7 @@
 	<div data-widget-area="sidebar" class="hidden"></div>
 
 	<!-- Hero Section -->
-	<div class="music-hero mb-4 p-5 text-white rounded-4 shadow-sm" style="background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(20px);">
+	<div class="music-hero mb-4 p-5 text-white rounded-4 shadow-sm" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%); backdrop-filter: blur(20px);">
 		<div class="row align-items-center">
 			<div class="col-md-8">
 				<h1 class="display-5 fw-bold mb-2">一起听歌</h1>

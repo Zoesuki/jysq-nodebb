@@ -58,6 +58,7 @@ Search.cachedPlaylistSongs = null;
 				'netease': {
 					'song': '歌曲',
 					'playlist': '所有歌单',
+					'user': '用户',
 					'user-playlist': '用户歌单'
 				}
 			};
@@ -66,15 +67,17 @@ Search.cachedPlaylistSongs = null;
 
 			// 更新占位符文本
 			let placeholder = '';
-			if (type === 'playlist' || type === 'user-playlist') {
-				if (source === 'netease' && type === 'user-playlist') {
-					placeholder = `输入网易云音乐用户ID...`;
-				} else if (source === 'netease' && type === 'playlist') {
-					placeholder = `搜索网易云音乐${typeName}...`;
-				} else {
-					placeholder = `搜索${sourceNames[source] || ''}${typeName}(QQ号)...`;
-				}
+			if (source === 'qq' && (type === 'playlist' || type === 'user-playlist')) {
+				// QQ音乐歌单搜索 - 提示输入QQ号
+				placeholder = `输入QQ号搜索${typeName}...`;
+			} else if (source === 'netease' && type === 'user-playlist') {
+				// 网易云用户歌单 - 提示输入用户ID
+				placeholder = `输入网易云音乐用户ID...`;
+			} else if (source === 'netease' && type === 'user') {
+				// 网易云用户 - 提示输入用户名
+				placeholder = `输入网易云用户名...`;
 			} else {
+				// 其他情况 - 通用提示
 				placeholder = `搜索${sourceNames[source] || ''}${typeName}...`;
 			}
 			$('#music-search-input').attr('placeholder', placeholder);
@@ -101,13 +104,23 @@ Search.cachedPlaylistSongs = null;
 		$(document).on('click', function (e) {
 			const $container = $('.search-container');
 			const $resultsContainer = $('#search-results-container');
+			const $dropdownMenu = $('.search-dropdown-menu');
 			const $target = $(e.target);
 
-			// 检查点击是否在搜索容器内部
+			// 检查点击是否在搜索容器内部(不包括搜索结果容器和下拉菜单)
 			const isInSearchContainer = $container.is($target) || $container.has($target).length > 0;
+			const isInResults = $resultsContainer.is($target) || $resultsContainer.has($target).length > 0;
+			const isInDropdown = $dropdownMenu.is($target) || $dropdownMenu.has($target).length > 0;
 
-			// 如果点击的是搜索容器内部，不做处理
-			if (isInSearchContainer) {
+			// 如果点击的是搜索容器内部(输入框、按钮等)或者搜索结果内部,不做处理
+			if (isInSearchContainer && !isInResults && !isInDropdown) {
+				return;
+			}
+
+			// 点击搜索结果内部,只关闭下拉菜单,保留搜索结果
+			if (isInResults) {
+				$('#search-type-btn').removeClass('show');
+				$('.search-dropdown-menu').removeClass('show');
 				return;
 			}
 
@@ -180,7 +193,11 @@ Search.cachedPlaylistSongs = null;
 				searchParams = {};
 			} else if (Search.searchSource === 'netease') {
 				// 网易云音乐搜索
-				if (Search.searchType === 'user-playlist') {
+				if (Search.searchType === 'user') {
+					// 网易云搜索用户
+					const type = '1002';
+					apiUrl = `/api/music/netease/search?keywords=${encodeURIComponent(State.searchKeyword)}&type=${type}&limit=10&offset=${(State.searchPageNo - 1) * 10}`;
+				} else if (Search.searchType === 'user-playlist') {
 					// 网易云用户歌单 - 需要用户ID
 					const uid = State.searchKeyword.trim();
 					if (!uid || isNaN(uid)) {
@@ -255,11 +272,22 @@ Search.cachedPlaylistSongs = null;
 
 			console.log('[Search] Response data:', data);
 
+
 			// 网易云音乐搜索结果已经通过后端适配,直接使用
 			if (Search.searchSource === 'netease' || Search.isSearchingPlaylistDetail) {
-				// 网易云音乐的歌单详情使用 songlist 字段,其他搜索使用 list 字段
-				const listField = Search.isSearchingPlaylistDetail ? 'songlist' : 'list';
-				const items = data.data?.[listField] || [];
+				let items = [];
+
+				// 根据搜索类型获取对应的数据字段
+				if (Search.searchType === 'user') {
+					// 用户搜索
+					items = data.data?.list || [];
+				} else if (Search.isSearchingPlaylistDetail) {
+					// 歌单详情
+					items = data.data?.songlist || [];
+				} else {
+					// 其他搜索(歌曲、歌单)
+					items = data.data?.list || [];
+				}
 
 				if (!data.data || items.length === 0) {
 					console.log('[Search] NetEase search returned empty results');
@@ -271,7 +299,7 @@ Search.cachedPlaylistSongs = null;
 					if (!isPageChange) {
 						alerts.alert({
 							title: '提示',
-							message: '未找到相关歌曲',
+							message: Search.searchType === 'user' ? '未找到相关用户' : '未找到相关歌曲',
 							type: 'info',
 							timeout: 3000,
 						});
@@ -279,7 +307,7 @@ Search.cachedPlaylistSongs = null;
 					return;
 				}
 
-				console.log('[Search] NetEase search found', items.length, 'songs');
+				console.log('[Search] NetEase search found', items.length, Search.searchType === 'user' ? 'users' : 'songs');
 
 				// 计算总页数
 				const total = data.data.total || items.length;
@@ -666,6 +694,28 @@ Search.cachedPlaylistSongs = null;
 			await Search.searchMusic(false);
 		});
 
+		// 查看用户歌单按钮点击事件
+		$('#search-results').on('click', '.search-user-playlist-btn', async function() {
+			const item = $(this).closest('.list-group-item');
+			const userId = item.data('user-id');
+			const userName = item.data('user-name');
+
+			console.log('[Search] User playlist button clicked, userId:', userId);
+
+			// 切换到用户歌单搜索类型
+			Search.searchType = 'user-playlist';
+			Search.searchSource = 'netease';
+
+			// 更新搜索框显示为用户ID
+			$('#music-search-input').val(userId);
+
+			// 更新搜索类型显示
+			$('#current-search-type').text('网易云音乐 用户歌单');
+
+			// 执行搜索
+			await Search.searchMusic(false);
+		});
+
 		// 添加全部按钮点击事件
 		$('#search-results').on('click', '.add-all-songs-btn', async function() {
 			const songs = Search.cachedPlaylistSongs || [];
@@ -796,14 +846,6 @@ Search.cachedPlaylistSongs = null;
 		const total = songs.length;
 		let successCount = 0;
 		let alreadyExistsCount = 0;
-
-		// 显示进度提示
-		alerts.alert({
-			title: '添加中',
-			message: `正在添加 ${total} 首歌曲...`,
-			type: 'info',
-			timeout: 0,
-		});
 
 		try {
 			for (const song of songs) {

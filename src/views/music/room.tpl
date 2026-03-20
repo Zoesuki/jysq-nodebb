@@ -781,6 +781,9 @@
 											<div class="search-dropdown-item" data-type="playlist" data-source="netease">
 												<i class="fa fa-compact-disc search-dropdown-icon"></i>所有歌单
 											</div>
+											<div class="search-dropdown-item" data-type="user" data-source="netease">
+												<i class="fa fa-users search-dropdown-icon"></i>用户
+											</div>
 											<div class="search-dropdown-item" data-type="user-playlist" data-source="netease">
 												<i class="fa fa-user search-dropdown-icon"></i>用户歌单
 											</div>
