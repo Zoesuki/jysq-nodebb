@@ -299,60 +299,56 @@ Music.doPlay = async function (roomId, track) {
 	if (!room) return;
 
 	// 如果歌曲没有播放链接,动态获取
-	if (!track.url && track.source) {
+	let trackWithUrl = { ...track }; // 创建副本，不修改原始track对象
+	if (!trackWithUrl.url && trackWithUrl.source) {
 		try {
-			let apiUrl;
-			if (track.source === 'netease') {
-				// 先检查网易云音乐版权
-				const checkResponse = await fetch(`http://localhost:3000/check/music?id=${track.id}`);
+			if (trackWithUrl.source === 'netease') {
+				// 先检查网易云音乐版权（通过NodeBB代理，自动带cookie）
+				const checkUrl = `http://localhost:4567/api/music/netease/check/music?id=${trackWithUrl.id}`;
+				const checkResponse = await fetch(checkUrl);
 				const checkData = await checkResponse.json();
+
 				if (!checkData.success) {
-					console.warn(`[Music] Song ${track.name} (${track.id}) is not available`);
+					console.warn(`[Music] Song ${trackWithUrl.name} (${trackWithUrl.id}) is not available`);
 					// 跳过不可用的歌曲,直接播放下一首
 					await Music.playNext({ uid: room.hostId }, { roomId });
 					return;
 				}
-				apiUrl = `http://localhost:3000/song/url?id=${track.id}`;
-			} else {
-				apiUrl = `http://localhost:3000/song/url?id=${track.id}`;
-			}
 
-			const response = await fetch(apiUrl);
-			const data = await response.json();
+				// 获取网易云音乐URL（通过NodeBB代理，自动带cookie）
+				const urlDataResponse = await fetch(`http://localhost:4567/api/music/netease/song/url?id=${trackWithUrl.id}`);
+				const urlData = await urlDataResponse.json();
 
-			// 更新 track 的 url
-			if (track.source === 'netease') {
-				if (data.data && data.data.length && data.data[0].url) {
-					track.url = data.data[0].url;
-					// 更新房间中该歌曲的 url
-					const playlistTrack = room.playlist.find(t => t.id === track.id);
-					if (playlistTrack) playlistTrack.url = track.url;
+				if (urlData.data && urlData.data.length && urlData.data[0].url) {
+					trackWithUrl.url = urlData.data[0].url;
 				} else {
-					console.warn(`[Music] Failed to get URL for song ${track.name}`);
+					console.warn(`[Music] Failed to get URL for song ${trackWithUrl.name}`);
 					await Music.playNext({ uid: room.hostId }, { roomId });
 					return;
 				}
 			} else {
-				if (data.result === 100 && data.data && data.data[track.id]) {
-					track.url = data.data[track.id];
-					// 更新房间中该歌曲的 url
-					const playlistTrack = room.playlist.find(t => t.id === track.id);
-					if (playlistTrack) playlistTrack.url = track.url;
+				// 获取QQ音乐URL（通过NodeBB代理，自动带cookie）
+				const urlDataResponse = await fetch(`http://localhost:4567/api/music/song/url/${trackWithUrl.id}`);
+				const urlData = await urlDataResponse.json();
+
+				if (urlData.result === 100 && urlData.data && urlData.data[trackWithUrl.id]) {
+					trackWithUrl.url = urlData.data[trackWithUrl.id];
 				} else {
-					console.warn(`[Music] Failed to get URL for song ${track.name}`);
+					console.warn(`[Music] Failed to get URL for song ${trackWithUrl.name}`);
 					await Music.playNext({ uid: room.hostId }, { roomId });
 					return;
 				}
 			}
 		} catch (err) {
-			console.error(`[Music] Failed to load URL for song ${track.name}:`, err);
+			console.error(`[Music] Failed to load URL for song ${trackWithUrl.name}:`, err);
 			// 获取失败,跳过该歌曲
 			await Music.playNext({ uid: room.hostId }, { roomId });
 			return;
 		}
 	}
 
-	room.currentTrack = track;
+	// 使用带URL的track（但URL不会被缓存到playlist）
+	room.currentTrack = trackWithUrl;
 	room.isPlaying = true;
 	room.currentTime = 0;
 	room.startTime = Date.now();
@@ -363,7 +359,10 @@ Music.doPlay = async function (roomId, track) {
 	// 从播放列表中移除该歌曲（如果存在），确保它作为"正在播放"的歌曲从"待播列表"中移除
 	const currentIndex = room.playlist.findIndex(t => t.id === track.id);
 	if (currentIndex !== -1) {
-		room.playlist.splice(currentIndex, 1);
+		// 从playlist中移除原始track（不包含url）
+		const removedTrack = room.playlist.splice(currentIndex, 1)[0];
+		// 确保移除的track不包含url
+		delete removedTrack.url;
 	}
 
 	const io = require('./index').server;
@@ -377,7 +376,7 @@ Music.doPlay = async function (roomId, track) {
 	});
 
 	io.to(`music_room_${roomId}`).emit('event:music.play', {
-		track: track,
+		track: trackWithUrl,
 		currentTime: 0,
 		startTime: room.startTime
 	});
@@ -385,13 +384,13 @@ Music.doPlay = async function (roomId, track) {
 	io.to(`music_room_${roomId}`).emit('event:music.chat', {
 		message: {
 			username: '系统',
-			content: `正在播放歌曲：${track.name}`,
+			content: `正在播放歌曲：${trackWithUrl.name}`,
 			timestamp: Date.now(),
 			system: true
 		}
 	});
 
-	// 通知所有用户播放列表已更新
+	// 通知所有用户播放列表已更新（playlist中的track不包含url）
 	io.to(`music_room_${roomId}`).emit('event:music.playlist.update', {
 		playlist: room.playlist
 	});
@@ -570,10 +569,13 @@ Music.addToPlaylist = async function (socket, data) {
 	const userData = await user.getUserFields(socket.uid, ['username']);
 	track.addedBy = userData.username;
 
-	// 检查是否有播放 URL(可以为空,播放时再加载)
-	if (!track.url && !track.source) {
-		throw new Error('缺少播放链接或来源');
+	// 检查是否有播放来源(可以为空,播放时再加载URL)
+	if (!track.source) {
+		throw new Error('缺少播放来源');
 	}
+
+	// 清除可能存在的URL，确保playlist中不缓存URL
+	delete track.url;
 
 	// 添加歌曲到播放列表
 	room.playlist.push(track);

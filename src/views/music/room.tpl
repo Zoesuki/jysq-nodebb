@@ -716,35 +716,45 @@
 			/* 删除旧的dropdown-item样式，不再使用 */
 
 			/* 搜索历史样式 */
-			.search-history-item {
-				border: none !important;
-				background: white !important;
-				padding: 12px 16px !important;
-				transition: all 0.2s ease;
-			}
-
-			.search-history-item:hover {
-				background: #f8f9fa !important;
-				transform: translateX(2px);
-			}
-
-			.search-history-item:hover .history-clear-btn {
-				background: #dc3545;
-				color: white;
-			}
-
-			.search-history-item .history-clear-btn:hover {
-				background: #c82333 !important;
-			}
-
-			.search-history-card {
-				max-height: 300px;
-				overflow: hidden;
-			}
-
-			.search-history-card .list-group {
-				max-height: 300px;
+			#search-history-chips {
+				max-height: 200px;
 				overflow-y: auto;
+			}
+
+			.history-chip {
+				padding: 6px 12px;
+				border-radius: 16px;
+				background: linear-gradient(135deg, rgba(13, 110, 253, 0.08) 0%, rgba(13, 110, 253, 0.04) 100%);
+				border: 1px solid rgba(13, 110, 253, 0.15);
+				color: #0d6efd;
+				font-size: 12px;
+				font-weight: 500;
+				cursor: pointer;
+				transition: all 0.2s ease;
+				display: inline-flex;
+				align-items: center;
+				gap: 5px;
+				white-space: nowrap;
+				max-width: 120px;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+
+			.history-chip:hover {
+				background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+				color: white;
+				transform: translateY(-2px);
+				box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+			}
+
+			.history-chip .history-remove {
+				font-size: 10px;
+				opacity: 0.6;
+				transition: opacity 0.2s ease;
+			}
+
+			.history-chip:hover .history-remove {
+				opacity: 1;
 			}
 
 		</style>
@@ -797,12 +807,21 @@
 										搜索
 									</button>
 								</div>
-								<!-- 搜索历史记录 -->
-								<div id="search-history-container" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 10001; margin-top: 8px; display: none;"></div>
-								<!-- 搜索结果 - 使用绝对定位，覆盖在其他内容之上 -->
+								<!-- 搜索结果 - 使用绝对定位，包含搜索历史和搜索结果 -->
 								<div id="search-results-container" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 10000; margin-top: 8px; visibility: hidden; opacity: 0; transition: all 0.3s ease;">
 									<div class="card border-0 shadow-sm">
-										<div class="card-body p-0">
+										<!-- 搜索历史 -->
+										<div id="search-history-section" style="display: none; padding: 16px;">
+											<div class="d-flex justify-content-between align-items-center mb-3">
+												<span class="text-muted small fw-bold"><i class="fa fa-history me-2"></i>搜索历史</span>
+												<button id="clear-history-btn" class="btn btn-sm btn-link text-decoration-none text-muted" style="padding: 0; font-size: 13px;">
+													<i class="fa fa-trash-o me-1"></i>清除
+												</button>
+											</div>
+											<div id="search-history-chips" class="d-flex flex-wrap gap-2"></div>
+										</div>
+										<!-- 搜索结果 -->
+										<div id="search-results-section" class="card-body p-0" style="display: none;">
 											<div id="search-results" class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;"></div>
 										</div>
 										<!-- 分页 -->
@@ -810,7 +829,10 @@
 											<button id="prev-page-btn" class="btn btn-sm btn-outline-primary" disabled>
 												<i class="fa fa-chevron-left"></i>
 											</button>
-											<span class="text-muted small">第 <span id="current-page">1</span> 页</span>
+											<div class="d-flex align-items-center">
+												<input type="number" id="page-input" class="form-control form-control-sm text-center" style="width: 60px;" min="1" value="1" placeholder="按回车跳转">
+												<span class="text-muted small ms-2">/ <span id="total-pages">1</span> 页</span>
+											</div>
 											<button id="next-page-btn" class="btn btn-sm btn-outline-primary" disabled>
 												<i class="fa fa-chevron-right"></i>
 											</button>

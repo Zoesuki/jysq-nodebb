@@ -174,6 +174,13 @@ Search.cachedPlaylistSongs = null;
 			State.searchPageNo = 1;
 		}
 
+		// 隐藏搜索历史，显示搜索结果容器
+		const $resultsContainer = $('#search-results-container');
+		$resultsContainer.css({
+			'visibility': 'visible',
+			'opacity': '1'
+		});
+
 		// 添加loading状态
 		const $searchBtn = $('#search-track-btn');
 		$searchBtn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> 搜索中...');
@@ -272,6 +279,24 @@ Search.cachedPlaylistSongs = null;
 
 			console.log('[Search] Response data:', data);
 
+			// 检查是否为错误响应
+			if (data.result && data.result !== 100) {
+				console.error('[Search] API returned error:', data);
+				$('#search-results-container').css({
+					'visibility': 'hidden',
+					'opacity': '0'
+				});
+
+				if (!isPageChange) {
+					alerts.alert({
+						title: '错误',
+						message: data.errMsg || data.message || '搜索失败',
+						type: 'error',
+						timeout: 3000,
+					});
+				}
+				return;
+			}
 
 			// 网易云音乐搜索结果已经通过后端适配,直接使用
 			if (Search.searchSource === 'netease' || Search.isSearchingPlaylistDetail) {
@@ -431,9 +456,19 @@ Search.cachedPlaylistSongs = null;
 			console.log('[Search] UI.showSearchResults completed');
 		} catch (err) {
 			console.error('Search failed:', err);
+
+			// 检查错误对象中是否包含API响应的错误信息
+			let errorMessage = '搜索失败,请稍后重试';
+			if (err.errMsg) {
+				errorMessage = err.errMsg;
+			} else if (err.message && err.message.includes('500')) {
+				// 如果是网络请求失败，尝试从响应中获取错误信息
+				errorMessage = '网络错误,请稍后重试';
+			}
+
 			alerts.alert({
 				title: '错误',
-				message: '搜索失败,请稍后重试',
+				message: errorMessage,
 				type: 'error',
 				timeout: 3000,
 			});
@@ -454,32 +489,16 @@ Search.cachedPlaylistSongs = null;
 		});
 
 		// 搜索框获取焦点时显示历史记录
-		$('#music-search-input').off('focus').on('focus', function() {
-			// 如果搜索结果可见，不显示历史记录
-			const $resultsContainer = $('#search-results-container');
-			if ($resultsContainer.length && $resultsContainer.css('visibility') === 'visible') {
-				console.log('[Search] Results visible, not showing history');
-				return;
-			}
-			console.log('[Search] Showing history');
+		// 点击搜索输入框显示历史记录和搜索结果
+		$('#music-search-input').off('click').on('click', function() {
+			// 显示搜索历史和搜索结果
 			Search.showSearchHistory();
 		});
 
-		// 点击外部隐藏历史记录和搜索结果
-		$(document).off('click.music-search').on('click.music-search', function(e) {
-			const $searchInput = $('#music-search-input');
-			const $historyContainer = $('#search-history-container');
-			const $searchContainer = $('.search-container');
-			const $resultsContainer = $('#search-results-container');
-			const $target = $(e.target);
-
-			// 检查是否点击在搜索容器外部，或者点击的是搜索结果容器
-			const isInResultsContainer = $resultsContainer.is($target) || $resultsContainer.has($target).length > 0;
-			const isInSearchContainer = $searchContainer.is($target) || $searchContainer.has($target).length > 0;
-
-			if (!isInSearchContainer || isInResultsContainer) {
-				$historyContainer.hide();
-			}
+		// 聚焦搜索输入框也显示历史记录和搜索结果
+		$('#music-search-input').off('focus').on('focus', function() {
+			// 显示搜索历史和搜索结果
+			Search.showSearchHistory();
 		});
 
 		// 上一页
@@ -501,60 +520,151 @@ Search.cachedPlaylistSongs = null;
 				$('#search-results').scrollTop(0);
 			}
 		});
+
+		// 跳转到指定页
+		$('#jump-page-btn').off('click').on('click', function() {
+			const $pageInput = $('#page-input');
+			const targetPage = parseInt($pageInput.val(), 10);
+
+			// 验证页码
+			if (isNaN(targetPage) || targetPage < 1) {
+				alerts.alert({
+					title: '提示',
+					message: '请输入有效的页码',
+					type: 'info',
+					timeout: 3000,
+				});
+				$pageInput.val(State.searchPageNo);
+				return;
+			}
+
+			if (targetPage > State.searchTotalPages) {
+				alerts.alert({
+					title: '提示',
+					message: `最大页数为 ${State.searchTotalPages}`,
+					type: 'info',
+					timeout: 3000,
+				});
+				$pageInput.val(State.searchPageNo);
+				return;
+			}
+
+			// 如果输入的是当前页，不需要跳转
+			if (targetPage === State.searchPageNo) {
+				return;
+			}
+
+			State.searchPageNo = targetPage;
+			Search.searchMusic(true);
+			// 滚动到搜索结果顶部
+			$('#search-results').scrollTop(0);
+		});
+
+		// 页数输入框回车跳转
+		$('#page-input').off('keypress').on('keypress', function(e) {
+			if (e.which === 13) { // Enter键
+				const $pageInput = $(this);
+				const targetPage = parseInt($pageInput.val(), 10);
+
+				// 验证页码
+				if (isNaN(targetPage) || targetPage < 1) {
+					alerts.alert({
+						title: '提示',
+						message: '请输入有效的页码',
+						type: 'info',
+						timeout: 3000,
+					});
+					$pageInput.val(State.searchPageNo);
+					return;
+				}
+
+				if (targetPage > State.searchTotalPages) {
+					alerts.alert({
+						title: '提示',
+						message: `最大页数为 ${State.searchTotalPages}`,
+						type: 'info',
+						timeout: 3000,
+					});
+					$pageInput.val(State.searchPageNo);
+					return;
+				}
+
+				// 如果输入的是当前页，不需要跳转
+				if (targetPage === State.searchPageNo) {
+					return;
+				}
+
+				State.searchPageNo = targetPage;
+				Search.searchMusic(true);
+				// 滚动到搜索结果顶部
+				$('#search-results').scrollTop(0);
+			}
+		});
 	};
 
 	// 显示搜索历史
 	Search.showSearchHistory = function () {
 		const history = Search.getSearchHistory();
-		const $container = $('#search-history-container');
+		const $container = $('#search-results-container');
+		const $historySection = $('#search-history-section');
+		const $resultsSection = $('#search-results-section');
+		const $chipsContainer = $('#search-history-chips');
+		const $resultsContainer = $('#search-results');
 
-		if (!history || history.length === 0) {
-			$container.hide();
-			return;
+		// 显示容器
+		$container.css({
+			'visibility': 'visible',
+			'opacity': '1'
+		});
+
+		// 总是显示历史区域
+		$historySection.show();
+
+		// 显示之前的搜索结果（如果有内容）
+		$resultsSection.show();
+
+		// 如果没有搜索结果，显示空提示
+		if ($resultsContainer.children().length === 0) {
+			$resultsContainer.html(`
+				<div class="text-center text-muted py-4">
+					<i class="fa fa-search fa-2x mb-3 opacity-25"></i>
+					<p>暂无搜索结果</p>
+				</div>
+			`);
 		}
 
-		let html = '<div class="search-history-card card border-0 shadow-sm" style="background: white; border-radius: 12px; overflow: hidden;">';
-		html += '<div class="list-group list-group-flush" style="max-height: 300px; overflow-y: auto; overflow-x: hidden;">';
-		history.forEach(function(keyword) {
-			html += `
-				<button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center search-history-item" data-keyword="${keyword}" style="padding: 12px 16px; border: none; border-bottom: 1px solid #f0f0f0; background: white; transition: all 0.2s ease; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-					<span style="color: #212529; font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${keyword}</span>
-					<i class="fa fa-times history-clear-btn" style="cursor: pointer; color: #6c757d; font-size: 14px; padding: 4px; border-radius: 4px; transition: all 0.2s ease; flex-shrink: 0; margin-left: 8px;"></i>
-				</button>
-			`;
-		});
-		html += '</div>';
-		html += '</div>';
+		// 生成历史记录chips
+		let html = '';
+		if (history && history.length > 0) {
+			history.forEach(function(keyword) {
+				html += `
+					<span class="history-chip" data-keyword="${keyword}" title="${keyword}">
+						<span class="history-text">${keyword}</span>
+						<i class="fa fa-times history-remove" style="cursor: pointer;"></i>
+					</span>
+				`;
+			});
+		} else {
+			html = '<span class="text-muted small">暂无搜索历史</span>';
+		}
 
-		// 清除历史按钮
-		html += `
-			<button id="clear-history-btn" class="btn btn-sm btn-light w-100 mt-2" style="border-radius: 8px; border: 1px solid #dee2e6; background: #f8f9fa;">
-				<i class="fa fa-trash-o me-1"></i>清除历史
-			</button>
-		`;
+		$chipsContainer.html(html);
 
-		$container.html(html).show();
+		// 绑定点击事件
+		$chipsContainer.find('.history-chip').on('click', function(e) {
+			// 如果点击的是删除按钮，不触发搜索
+			if ($(e.target).hasClass('history-remove')) {
+				e.stopPropagation();
+				const keyword = $(this).data('keyword');
+				Search.removeSearchHistory(keyword);
+				Search.showSearchHistory();
+				return;
+			}
 
-		// 绑定事件
-		$container.find('[data-keyword]').on('click', function() {
 			const keyword = $(this).data('keyword');
 			$('#music-search-input').val(keyword);
-			// 隐藏历史记录
-			$container.hide();
 			// 执行搜索
 			Search.searchMusic(false);
-		});
-
-		$container.find('.history-clear-btn').on('click', function(e) {
-			e.stopPropagation();
-			const keyword = $(this).closest('[data-keyword]').data('keyword');
-			Search.removeSearchHistory(keyword);
-			Search.showSearchHistory();
-		});
-
-		$('#clear-history-btn').on('click', function() {
-			Search.clearSearchHistory();
-			$container.hide();
 		});
 	};
 
@@ -742,82 +852,14 @@ Search.cachedPlaylistSongs = null;
 			const coverUrl = item.data('cover');
 
 			try {
-				let track;
-				let apiUrl;
-
-				// 对于网易云音乐，先检查音乐是否可用
-				if (source === 'netease') {
-					const checkUrl = `/api/music/netease/check/music?id=${songId}`;
-					const checkResponse = await fetch(checkUrl, {
-						credentials: 'include',
-					});
-					const checkData = await checkResponse.json();
-
-					if (!checkData.success) {
-						// 音乐不可用，显示提示
-						alerts.alert({
-							title: '无法播放',
-							message: checkData.message || '该歌曲暂无版权，无法播放',
-							type: 'warning',
-							timeout: 3000,
-						});
-						return;
-					}
-				}
-
-				// 统一构建 API URL
-				if (source === 'netease') {
-					apiUrl = `/api/music/netease/song/url?id=${songId}`;
-				} else {
-					apiUrl = `/api/music/song/url/${songId}`;
-				}
-
-				// 统一获取播放链接
-				const response = await fetch(apiUrl, {
-					credentials: 'include',
-				});
-				const data = await response.json();
-
-				// 统一处理响应数据
-				if (source === 'netease') {
-					// 网易云格式: { data: [{ url: xxx }] }
-					if (!data.data || !data.data.length || !data.data[0].url) {
-						alerts.alert({
-							title: '错误',
-							message: '获取网易云音乐播放链接失败',
-							type: 'error',
-							timeout: 3000,
-						});
-						return;
-					}
-					track = {
-						id: songId,
-						name: songName,
-						artist: singer,
-						cover: coverUrl,
-						url: data.data[0].url,
-						source: 'netease',
-					};
-				} else {
-					// QQ音乐格式: { data: { songId: url } }
-					if (data.result !== 100 || !data.data || !data.data[songId]) {
-						alerts.alert({
-							title: '错误',
-							message: '获取QQ音乐播放链接失败',
-							type: 'error',
-							timeout: 3000,
-						});
-						return;
-					}
-					track = {
-						id: songId,
-						name: songName,
-						artist: singer,
-						cover: coverUrl,
-						url: data.data[songId],
-						source: 'qq',
-					};
-				}
+				// 构建track对象（不包含url，播放时再动态获取）
+				const track = {
+					id: songId,
+					name: songName,
+					artist: singer,
+					cover: coverUrl,
+					source: source,
+				};
 
 				const addResponse = await socket.emit('modules.music.addToPlaylist', { roomId: State.currentRoomId, track: track });
 				if (addResponse && addResponse.alreadyExists) {
@@ -864,14 +906,13 @@ Search.cachedPlaylistSongs = null;
 
 					const coverUrl = song.cover || '/assets/images/music-cover.png';
 
-					// 构建track对象(不包含url,播放时再获取)
+					// 构建track对象（不包含url，播放时动态获取）
 					const track = {
 						id: songId,
 						name: songName,
 						artist: singer,
 						cover: coverUrl,
 						source: source,
-						url: '' // url在播放时动态获取
 					};
 
 					// 添加到播放列表

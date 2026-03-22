@@ -102,8 +102,18 @@ define('music/ui', [
 					targetTime = (Date.now() - room.startTime) / 1000;
 				}
 
-				if (State.audioPlayer.src !== room.currentTrack.url) {
-					State.audioPlayer.src = room.currentTrack.url;
+				const audioUrl = room.currentTrack.url;
+
+				// 检查URL是否有效
+				if (!audioUrl || audioUrl.trim() === '') {
+					console.error('[Music] Invalid audio URL:', audioUrl);
+					return;
+				}
+
+				// 如果需要更换音频源
+				if (State.audioPlayer.src !== audioUrl) {
+					console.log('[Music] Setting audio source:', audioUrl);
+					State.audioPlayer.src = audioUrl;
 
 					// 参考 Jusic-ui：设置自动预加载，提升加载速度
 					State.audioPlayer.preload = 'auto';
@@ -487,8 +497,9 @@ define('music/ui', [
 
 		container.html(html);
 
-		// 隐藏搜索历史记录
-		$('#search-history-container').hide();
+		// 显示搜索结果区域和历史区域（都显示）
+		$('#search-results-section').show();
+		$('#search-history-section').show();
 
 		const $resultsContainer = $('#search-results-container');
 
@@ -501,7 +512,10 @@ define('music/ui', [
 
 	// 更新分页UI
 	UI.updatePaginationUI = function () {
-		$('#current-page').text(`${State.searchPageNo} / ${State.searchTotalPages || 1}`);
+		$('#current-page').text(State.searchPageNo);
+		$('#total-pages').text(State.searchTotalPages || 1);
+		$('#page-input').val(State.searchPageNo);
+		$('#page-input').attr('max', State.searchTotalPages || 1);
 		$('#prev-page-btn').prop('disabled', State.searchPageNo <= 1);
 		$('#next-page-btn').prop('disabled', State.searchPageNo >= State.searchTotalPages);
 

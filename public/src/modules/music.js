@@ -58,6 +58,7 @@ define('music', [
 			State.audioPlayer.removeEventListener('timeupdate', Lyrics.onTimeUpdate);
 			State.audioPlayer.removeEventListener('ended', Music.onTrackEnded);
 			State.audioPlayer.removeEventListener('loadedmetadata', Music.onMetadataLoaded);
+			State.audioPlayer.removeEventListener('error', Music.onAudioError);
 		}
 
 		// 重置状态缓存
@@ -80,6 +81,7 @@ define('music', [
 			State.audioPlayer.addEventListener('timeupdate', Lyrics.onTimeUpdate);
 			State.audioPlayer.addEventListener('ended', Music.onTrackEnded);
 			State.audioPlayer.addEventListener('loadedmetadata', Music.onMetadataLoaded);
+			State.audioPlayer.addEventListener('error', Music.onAudioError);
 		}
 
 		const pathParts = window.location.pathname.split('/');
@@ -198,6 +200,37 @@ define('music', [
 		$('#total-time').text(State.formatTime(State.audioPlayer.duration));
 	};
 
+	Music.onAudioError = function (e) {
+		if (!State.audioPlayer) return;
+
+		const error = State.audioPlayer.error;
+		if (!error) return;
+
+		console.error('[Music] Audio error:', {
+			code: error.code,
+			message: error.message,
+			networkState: State.audioPlayer.networkState,
+			readyState: State.audioPlayer.readyState,
+			currentSrc: State.audioPlayer.currentSrc
+		});
+
+		// 处理403 Forbidden错误 (MEDIA_ERR_SRC_NOT_SUPPORTED)
+		if (error.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+			console.warn('[Music] 403 Forbidden or unsupported source, skipping to next track...');
+			alerts.alert({
+				title: '播放失败',
+				message: '当前歌曲无法播放，自动切换到下一首',
+				type: 'warning',
+				timeout: 2000,
+			});
+
+			// 自动切换到下一首
+			socket.emit('modules.music.playNext', { roomId: State.currentRoomId }).catch(err => {
+				console.error('Failed to play next track:', err);
+			});
+		}
+	};
+
 	Music.onTrackEnded = function () {
 		console.log('[Music] Track ended, checking playlist...');
 		// 直接调用playNext,它会处理播放列表为空的情况
@@ -215,8 +248,24 @@ define('music', [
 		UI.hidePlayOverlay();
 
 		if (State.currentTrack && State.currentTrack.url) {
-			if (State.audioPlayer.src !== State.currentTrack.url) {
-				State.audioPlayer.src = State.currentTrack.url;
+			const audioUrl = State.currentTrack.url;
+
+			// 检查URL是否有效
+			if (!audioUrl || audioUrl.trim() === '') {
+				console.error('[Music] Invalid track URL:', audioUrl);
+				alerts.alert({
+					title: '播放失败',
+					message: '歌曲URL无效',
+					type: 'error',
+					timeout: 3000,
+				});
+				return;
+			}
+
+			// 更新音频源
+			if (State.audioPlayer.src !== audioUrl) {
+				console.log('[Music] Setting audio source:', audioUrl);
+				State.audioPlayer.src = audioUrl;
 			}
 
 			const playPromise = State.audioPlayer.play();
@@ -226,9 +275,25 @@ define('music', [
 					console.log('[Music] Audio playback started successfully');
 				}).catch(error => {
 					console.error('[Music] Failed to play audio:', error);
+
+					// 根据错误类型显示不同的提示
+					let message = '无法播放音频，请检查您的浏览器设置';
+					if (error.name === 'NotSupportedError' || error.message?.includes('no supported sources')) {
+						message = '该音频格式不支持，请尝试其他歌曲';
+						console.error('[Music] NotSupportedError details:', {
+							url: audioUrl,
+							mime: State.audioPlayer.canPlayType?.('audio/mpeg'),
+							codecs: State.audioPlayer.canPlayType?.('audio/mp4; codecs="mp3"')
+						});
+					} else if (error.name === 'NotAllowedError') {
+						message = '浏览器阻止了自动播放，请点击页面后再试';
+					} else if (error.name === 'AbortError') {
+						message = '播放被中断';
+					}
+
 					alerts.alert({
 						title: '播放失败',
-						message: '无法播放音频，请检查您的浏览器设置',
+						message: message,
 						type: 'error',
 						timeout: 3000,
 					});
