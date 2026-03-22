@@ -718,7 +718,6 @@
 			/* 搜索历史样式 */
 			#search-history-chips {
 				max-height: 200px;
-				overflow-y: auto;
 			}
 
 			.history-chip {
@@ -736,7 +735,6 @@
 				gap: 5px;
 				white-space: nowrap;
 				max-width: 120px;
-				overflow: hidden;
 				text-overflow: ellipsis;
 			}
 
@@ -812,7 +810,7 @@
 									<div class="card border-0 shadow-sm">
 										<!-- 搜索历史 -->
 										<div id="search-history-section" style="display: none; padding: 16px;">
-											<div class="d-flex justify-content-between align-items-center mb-3">
+											<div class="d-flex justify-content-between align-items-center mb-2">
 												<span class="text-muted small fw-bold"><i class="fa fa-history me-2"></i>搜索历史</span>
 												<button id="clear-history-btn" class="btn btn-sm btn-link text-decoration-none text-muted" style="padding: 0; font-size: 13px;">
 													<i class="fa fa-trash-o me-1"></i>清除
